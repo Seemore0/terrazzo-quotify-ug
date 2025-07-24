@@ -27,37 +27,37 @@ interface QuotationDisplayProps {
   onBack: () => void;
 }
 
-const MATERIAL_BREAKDOWN = {
-  casting: [
-    { item: 'Stones floor white', quantity: '60 bags', price: 15000 },
-    { item: 'Stones floor black', quantity: '14 bags', price: 13000 },
-    { item: 'Stones floor red', quantity: '10 bags', price: 13000 },
-    { item: 'Stones skirting white', quantity: '9 bags', price: 15000 },
-    { item: 'Stones skirting black', quantity: '11 bags', price: 13000 },
-    { item: 'Stones skirting red', quantity: '4 bags', price: 13000 },
-    { item: 'Stips', quantity: '3 bundles', price: 60000 },
-    { item: 'Soft brush', quantity: '5', price: 12000 },
-    { item: 'Black oxide', quantity: '20 kg', price: 8000 },
-    { item: 'Concrete nails', quantity: '3 boxes', price: 5000 },
-    { item: 'Wooden stips', quantity: '30', price: 1000 },
-    { item: 'Ordinary cement', quantity: '52 bags', price: 33000 },
-    { item: 'White cement', quantity: '10 bags', price: 65000 }
-  ],
-  grinding: [
-    { item: 'Big machine Diamond', quantity: '2 sets', price: 150000 },
-    { item: 'Grinder Diamond', quantity: '2 pcs', price: 60000 },
-    { item: 'Pads 50(2*)', quantity: '3', price: 20000 },
-    { item: 'Pads 100(2*)', quantity: '2', price: 20000 },
-    { item: 'Pads 200(2*)', quantity: '2', price: 20000 },
-    { item: 'Pads 300(2*)', quantity: '2', price: 20000 },
-    { item: 'Pads 400(2*)', quantity: '2', price: 20000 },
-    { item: 'Pads 500(2*)', quantity: '1', price: 20000 },
-    { item: 'Grinder Pad holder', quantity: '4', price: 15000 },
-    { item: 'Machine Pad holder', quantity: '4', price: 15000 },
-    { item: 'Squeezer', quantity: '3', price: 10000 },
-    { item: 'Polish', quantity: '20 L', price: 20000 },
-    { item: 'Maintainer', quantity: '40 L', price: 10000 }
-  ]
+const MATERIAL_UNIT_PRICES = {
+  casting: {
+    'Stones floor white': { unit: 'bag', price: 15000 },
+    'Stones floor black': { unit: 'bag', price: 13000 },
+    'Stones floor red': { unit: 'bag', price: 13000 },
+    'Stones skirting white': { unit: 'bag', price: 15000 },
+    'Stones skirting black': { unit: 'bag', price: 13000 },
+    'Stones skirting red': { unit: 'bag', price: 13000 },
+    'Stips': { unit: 'bundle', price: 60000 },
+    'Soft brush': { unit: 'each', price: 12000 },
+    'Black oxide': { unit: 'kg', price: 15000 },
+    'Concrete nails': { unit: 'box', price: 5000 },
+    'Wooden strips': { unit: 'each', price: 1000 },
+    'Ordinary cement': { unit: 'bag', price: 33000 },
+    'White cement': { unit: 'bag', price: 65000 }
+  },
+  grinding: {
+    'Big machine diamond pads': { unit: 'set', price: 150000 },
+    'Grinder diamond pads': { unit: 'piece', price: 60000 },
+    'Pads 50 grit': { unit: 'pad', price: 20000 },
+    'Pads 100 grit': { unit: 'pad', price: 20000 },
+    'Pads 200 grit': { unit: 'pad', price: 20000 },
+    'Pads 300 grit': { unit: 'pad', price: 20000 },
+    'Pads 400 grit': { unit: 'pad', price: 20000 },
+    'Pads 500 grit': { unit: 'pad', price: 20000 },
+    'Grinder pad holder': { unit: 'each', price: 15000 },
+    'Machine pad holder': { unit: 'each', price: 15000 },
+    'Squeezer': { unit: 'each', price: 10000 },
+    'Polish': { unit: 'liter', price: 20000 },
+    'Maintainer': { unit: 'liter', price: 10000 }
+  }
 };
 
 export const QuotationDisplay = ({ 
@@ -72,6 +72,83 @@ export const QuotationDisplay = ({
 
   const getAreaInSqm = () => {
     return projectData.unit === 'sqft' ? projectData.area * 0.0929 : projectData.area;
+  };
+
+  const calculateCastingMaterials = (area: number) => {
+    // Stones (Floor)
+    const totalStones = area / 2;
+    const whiteStones = totalStones * (5 / 7);
+    const coloredStones = totalStones * (2 / 7);
+    const blackStones = coloredStones * (14 / 24);
+    const redStones = coloredStones * (10 / 24);
+
+    // Stones (Skirting)
+    const totalSkirtingStones = area / 3.33;
+    const whiteSkirtingStones = totalSkirtingStones * (5 / 7);
+    const coloredSkirtingStones = totalSkirtingStones * (2 / 7);
+    const blackSkirtingStones = coloredSkirtingStones * (11 / 24);
+    const redSkirtingStones = coloredSkirtingStones * (4 / 24);
+
+    // Cement
+    const ordinaryCement = totalStones / 2;
+    const whiteCement = area / 8;
+
+    // Other Materials
+    const woodenStrips = area / 2.67;
+    const stips = area / 26.67;
+    const softBrush = area / 16;
+    const blackOxide = area * 0.25;
+    const concreteNails = area / 26.67;
+
+    return [
+      { item: 'Stones floor white', quantity: `${Math.ceil(whiteStones)} bags`, price: MATERIAL_UNIT_PRICES.casting['Stones floor white'].price, total: Math.ceil(whiteStones) * MATERIAL_UNIT_PRICES.casting['Stones floor white'].price },
+      { item: 'Stones floor black', quantity: `${Math.ceil(blackStones)} bags`, price: MATERIAL_UNIT_PRICES.casting['Stones floor black'].price, total: Math.ceil(blackStones) * MATERIAL_UNIT_PRICES.casting['Stones floor black'].price },
+      { item: 'Stones floor red', quantity: `${Math.ceil(redStones)} bags`, price: MATERIAL_UNIT_PRICES.casting['Stones floor red'].price, total: Math.ceil(redStones) * MATERIAL_UNIT_PRICES.casting['Stones floor red'].price },
+      { item: 'Stones skirting white', quantity: `${Math.ceil(whiteSkirtingStones)} bags`, price: MATERIAL_UNIT_PRICES.casting['Stones skirting white'].price, total: Math.ceil(whiteSkirtingStones) * MATERIAL_UNIT_PRICES.casting['Stones skirting white'].price },
+      { item: 'Stones skirting black', quantity: `${Math.ceil(blackSkirtingStones)} bags`, price: MATERIAL_UNIT_PRICES.casting['Stones skirting black'].price, total: Math.ceil(blackSkirtingStones) * MATERIAL_UNIT_PRICES.casting['Stones skirting black'].price },
+      { item: 'Stones skirting red', quantity: `${Math.ceil(redSkirtingStones)} bags`, price: MATERIAL_UNIT_PRICES.casting['Stones skirting red'].price, total: Math.ceil(redSkirtingStones) * MATERIAL_UNIT_PRICES.casting['Stones skirting red'].price },
+      { item: 'Stips', quantity: `${Math.ceil(stips)} bundles`, price: MATERIAL_UNIT_PRICES.casting['Stips'].price, total: Math.ceil(stips) * MATERIAL_UNIT_PRICES.casting['Stips'].price },
+      { item: 'Soft brush', quantity: `${Math.ceil(softBrush)}`, price: MATERIAL_UNIT_PRICES.casting['Soft brush'].price, total: Math.ceil(softBrush) * MATERIAL_UNIT_PRICES.casting['Soft brush'].price },
+      { item: 'Black oxide', quantity: `${Math.ceil(blackOxide)} kg`, price: MATERIAL_UNIT_PRICES.casting['Black oxide'].price, total: Math.ceil(blackOxide) * MATERIAL_UNIT_PRICES.casting['Black oxide'].price },
+      { item: 'Concrete nails', quantity: `${Math.ceil(concreteNails)} boxes`, price: MATERIAL_UNIT_PRICES.casting['Concrete nails'].price, total: Math.ceil(concreteNails) * MATERIAL_UNIT_PRICES.casting['Concrete nails'].price },
+      { item: 'Wooden strips', quantity: `${Math.ceil(woodenStrips)}`, price: MATERIAL_UNIT_PRICES.casting['Wooden strips'].price, total: Math.ceil(woodenStrips) * MATERIAL_UNIT_PRICES.casting['Wooden strips'].price },
+      { item: 'Ordinary cement', quantity: `${Math.ceil(ordinaryCement)} bags`, price: MATERIAL_UNIT_PRICES.casting['Ordinary cement'].price, total: Math.ceil(ordinaryCement) * MATERIAL_UNIT_PRICES.casting['Ordinary cement'].price },
+      { item: 'White cement', quantity: `${Math.ceil(whiteCement)} bags`, price: MATERIAL_UNIT_PRICES.casting['White cement'].price, total: Math.ceil(whiteCement) * MATERIAL_UNIT_PRICES.casting['White cement'].price }
+    ];
+  };
+
+  const calculateGrindingMaterials = (area: number) => {
+    const bigMachineDiamondPads = area / 115;
+    const grinderDiamondPads = area / 115;
+    const pads50Grit = area / 77;
+    const pads100to400Grit = area / 115;
+    const pads500Grit = area / 230;
+    const grinderPadHolders = area / 57.5;
+    const machinePadHolders = area / 57.5;
+    const squeezer = area / 76.7;
+    const polish = area * 0.087;
+    const maintainer = area * 0.174;
+
+    return [
+      { item: 'Big machine diamond pads', quantity: `${Math.ceil(bigMachineDiamondPads)} sets`, price: MATERIAL_UNIT_PRICES.grinding['Big machine diamond pads'].price, total: Math.ceil(bigMachineDiamondPads) * MATERIAL_UNIT_PRICES.grinding['Big machine diamond pads'].price },
+      { item: 'Grinder diamond pads', quantity: `${Math.ceil(grinderDiamondPads)} pcs`, price: MATERIAL_UNIT_PRICES.grinding['Grinder diamond pads'].price, total: Math.ceil(grinderDiamondPads) * MATERIAL_UNIT_PRICES.grinding['Grinder diamond pads'].price },
+      { item: 'Pads 50 grit', quantity: `${Math.ceil(pads50Grit)}`, price: MATERIAL_UNIT_PRICES.grinding['Pads 50 grit'].price, total: Math.ceil(pads50Grit) * MATERIAL_UNIT_PRICES.grinding['Pads 50 grit'].price },
+      { item: 'Pads 100 grit', quantity: `${Math.ceil(pads100to400Grit)}`, price: MATERIAL_UNIT_PRICES.grinding['Pads 100 grit'].price, total: Math.ceil(pads100to400Grit) * MATERIAL_UNIT_PRICES.grinding['Pads 100 grit'].price },
+      { item: 'Pads 200 grit', quantity: `${Math.ceil(pads100to400Grit)}`, price: MATERIAL_UNIT_PRICES.grinding['Pads 200 grit'].price, total: Math.ceil(pads100to400Grit) * MATERIAL_UNIT_PRICES.grinding['Pads 200 grit'].price },
+      { item: 'Pads 300 grit', quantity: `${Math.ceil(pads100to400Grit)}`, price: MATERIAL_UNIT_PRICES.grinding['Pads 300 grit'].price, total: Math.ceil(pads100to400Grit) * MATERIAL_UNIT_PRICES.grinding['Pads 300 grit'].price },
+      { item: 'Pads 400 grit', quantity: `${Math.ceil(pads100to400Grit)}`, price: MATERIAL_UNIT_PRICES.grinding['Pads 400 grit'].price, total: Math.ceil(pads100to400Grit) * MATERIAL_UNIT_PRICES.grinding['Pads 400 grit'].price },
+      { item: 'Pads 500 grit', quantity: `${Math.ceil(pads500Grit)}`, price: MATERIAL_UNIT_PRICES.grinding['Pads 500 grit'].price, total: Math.ceil(pads500Grit) * MATERIAL_UNIT_PRICES.grinding['Pads 500 grit'].price },
+      { item: 'Grinder pad holder', quantity: `${Math.ceil(grinderPadHolders)}`, price: MATERIAL_UNIT_PRICES.grinding['Grinder pad holder'].price, total: Math.ceil(grinderPadHolders) * MATERIAL_UNIT_PRICES.grinding['Grinder pad holder'].price },
+      { item: 'Machine pad holder', quantity: `${Math.ceil(machinePadHolders)}`, price: MATERIAL_UNIT_PRICES.grinding['Machine pad holder'].price, total: Math.ceil(machinePadHolders) * MATERIAL_UNIT_PRICES.grinding['Machine pad holder'].price },
+      { item: 'Squeezer', quantity: `${Math.ceil(squeezer)}`, price: MATERIAL_UNIT_PRICES.grinding['Squeezer'].price, total: Math.ceil(squeezer) * MATERIAL_UNIT_PRICES.grinding['Squeezer'].price },
+      { item: 'Polish', quantity: `${Math.ceil(polish)} L`, price: MATERIAL_UNIT_PRICES.grinding['Polish'].price, total: Math.ceil(polish) * MATERIAL_UNIT_PRICES.grinding['Polish'].price },
+      { item: 'Maintainer', quantity: `${Math.ceil(maintainer)} L`, price: MATERIAL_UNIT_PRICES.grinding['Maintainer'].price, total: Math.ceil(maintainer) * MATERIAL_UNIT_PRICES.grinding['Maintainer'].price }
+    ];
+  };
+
+  const getMaterialBreakdown = (phase: 'casting' | 'grinding') => {
+    const area = getAreaInSqm();
+    return phase === 'casting' ? calculateCastingMaterials(area) : calculateGrindingMaterials(area);
   };
 
   const getQuoteText = () => {
@@ -169,12 +246,12 @@ Generated by Terrazzo Quotation Pro
         doc.setFontSize(10);
         doc.setFont(undefined, 'normal');
         
-        MATERIAL_BREAKDOWN[phase].forEach(material => {
+        getMaterialBreakdown(phase).forEach(material => {
           if (yPos > 270) {
             doc.addPage();
             yPos = 20;
           }
-          doc.text(`${material.item} - ${material.quantity} - ${formatCurrency(material.price)}`, 20, yPos);
+          doc.text(`${material.item} - ${material.quantity} - ${formatCurrency(material.total)}`, 20, yPos);
           yPos += 8;
         });
         
@@ -289,11 +366,11 @@ Generated by Terrazzo Quotation Pro
                       </tr>
                     </thead>
                     <tbody>
-                      {MATERIAL_BREAKDOWN[phase].map((material, index) => (
+                      {getMaterialBreakdown(phase).map((material, index) => (
                         <tr key={index} className="border-t">
                           <td className="p-3">{material.item}</td>
                           <td className="p-3">{material.quantity}</td>
-                          <td className="p-3 text-right">{formatCurrency(material.price)}</td>
+                          <td className="p-3 text-right">{formatCurrency(material.total)}</td>
                         </tr>
                       ))}
                     </tbody>
