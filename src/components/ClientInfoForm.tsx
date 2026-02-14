@@ -56,17 +56,6 @@ export const ClientInfoForm = ({ data, onChange }: ClientInfoFormProps) => {
         />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="projectDate">Project Date</Label>
-        <Input
-          id="projectDate"
-          type="date"
-          value={data.date}
-          onChange={(e) => handleChange('date', e.target.value)}
-          className="shadow-input bg-muted"
-          readOnly
-        />
-      </div>
     </div>
   );
 };
