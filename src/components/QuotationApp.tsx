@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Calculator, ArrowLeft, ArrowRight, FileText } from 'lucide-react';
+import { Calculator, ArrowLeft, ArrowRight, FileText, Settings } from 'lucide-react';
 import { ClientInfoForm } from './ClientInfoForm';
 import { WorkModeSelector } from './WorkModeSelector';
 import { StyleSelector } from './StyleSelector';
@@ -11,10 +11,12 @@ import { LiveSummary } from './LiveSummary';
 import { useToast } from '@/hooks/use-toast';
 import {
   type WorkMode, type TerrazzoStyle, type PatternType,
-  calculateRate, formatCurrency,
+  formatCurrency,
 } from '@/lib/pricingConfig';
+import { loadAdminConfig, calculateRateFromConfig } from '@/lib/usePricingConfig';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useNavigate } from 'react-router-dom';
 
 interface ClientData {
   name: string;
@@ -27,6 +29,8 @@ const STEPS = ['Client Details', 'Work Mode', 'Terrazzo Style', 'Pattern', 'Summ
 const QuotationApp = () => {
   const [step, setStep] = useState(0);
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const adminConfig = loadAdminConfig();
 
   const [client, setClient] = useState<ClientData>({ name: '', phone: '', location: '' });
   const [area, setArea] = useState(0);
@@ -56,7 +60,7 @@ const QuotationApp = () => {
 
   // Live rate preview (only when enough selections exist)
   const liveRate = workMode && style && pattern
-    ? calculateRate(style, workMode, pattern)
+    ? calculateRateFromConfig(adminConfig, style, workMode, pattern)
     : null;
 
   return (
@@ -75,6 +79,15 @@ const QuotationApp = () => {
           <p className="text-muted-foreground text-lg">
             Professional quotations for Terrazzo flooring projects in Uganda
           </p>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-2 text-muted-foreground"
+            onClick={() => navigate('/admin')}
+          >
+            <Settings className="h-4 w-4 mr-1" />
+            Admin Settings
+          </Button>
         </div>
 
         {/* Step progress */}

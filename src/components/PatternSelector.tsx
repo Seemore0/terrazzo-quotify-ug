@@ -1,6 +1,7 @@
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { PATTERNS, type PatternType } from '@/lib/pricingConfig';
+import { type PatternType } from '@/lib/pricingConfig';
+import { loadAdminConfig } from '@/lib/usePricingConfig';
 import { CheckCircle } from 'lucide-react';
 
 interface PatternSelectorProps {
@@ -9,11 +10,14 @@ interface PatternSelectorProps {
 }
 
 export const PatternSelector = ({ selected, onSelect }: PatternSelectorProps) => {
+  const adminConfig = loadAdminConfig();
+  const patterns = adminConfig.patterns;
+
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-semibold">Select Pattern</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {PATTERNS.map((pattern) => (
+        {patterns.map((pattern) => (
           <Card
             key={pattern.id}
             className={`p-5 cursor-pointer transition-all duration-200 ${
