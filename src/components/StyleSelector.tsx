@@ -1,5 +1,6 @@
 import { Card } from '@/components/ui/card';
-import { TERRAZZO_STYLES, type TerrazzoStyle, type WorkMode, formatCurrency } from '@/lib/pricingConfig';
+import { type TerrazzoStyle, type WorkMode, formatCurrency } from '@/lib/pricingConfig';
+import { loadAdminConfig } from '@/lib/usePricingConfig';
 import { CheckCircle } from 'lucide-react';
 
 interface StyleSelectorProps {
@@ -9,7 +10,10 @@ interface StyleSelectorProps {
 }
 
 export const StyleSelector = ({ selected, workMode, onSelect }: StyleSelectorProps) => {
-  const getDisplayRate = (style: typeof TERRAZZO_STYLES[0]) => {
+  const adminConfig = loadAdminConfig();
+  const styles = adminConfig.styles;
+
+  const getDisplayRate = (style: typeof styles[0]) => {
     if (!workMode) return formatCurrency(style.materialsRate + style.labourRate);
     if (workMode === 'materials') return formatCurrency(style.materialsRate);
     if (workMode === 'labour') return formatCurrency(style.labourRate);
@@ -20,7 +24,7 @@ export const StyleSelector = ({ selected, workMode, onSelect }: StyleSelectorPro
     <div className="space-y-4">
       <h2 className="text-xl font-semibold">Select Terrazzo Style</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {TERRAZZO_STYLES.map((style) => (
+        {styles.map((style) => (
           <Card
             key={style.id}
             className={`p-5 cursor-pointer transition-all duration-200 ${

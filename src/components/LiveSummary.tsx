@@ -6,9 +6,9 @@ import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
 import {
   type WorkMode, type TerrazzoStyle, type PatternType,
-  WORK_MODES, TERRAZZO_STYLES, PATTERNS,
-  calculateRate, calculateTotal, formatCurrency,
+  WORK_MODES, formatCurrency,
 } from '@/lib/pricingConfig';
+import { loadAdminConfig, calculateRateFromConfig, calculateTotalFromConfig } from '@/lib/usePricingConfig';
 
 interface ClientData {
   name: string;
@@ -26,13 +26,14 @@ interface LiveSummaryProps {
 
 export const LiveSummary = ({ client, area, workMode, style, pattern }: LiveSummaryProps) => {
   const { toast } = useToast();
-  const rate = calculateRate(style, workMode, pattern);
-  const total = calculateTotal(area, style, workMode, pattern);
+  const adminConfig = loadAdminConfig();
+  const rate = calculateRateFromConfig(adminConfig, style, workMode, pattern);
+  const total = calculateTotalFromConfig(adminConfig, area, style, workMode, pattern);
   const modeName = WORK_MODES.find(m => m.id === workMode)!.name;
-  const styleName = TERRAZZO_STYLES.find(s => s.id === style)!.name;
-  const patternName = PATTERNS.find(p => p.id === pattern)!.name;
-  const patternMultiplier = PATTERNS.find(p => p.id === pattern)!.multiplier;
-  const styleConfig = TERRAZZO_STYLES.find(s => s.id === style)!;
+  const styleName = adminConfig.styles.find(s => s.id === style)!.name;
+  const patternName = adminConfig.patterns.find(p => p.id === pattern)!.name;
+  const patternMultiplier = adminConfig.patterns.find(p => p.id === pattern)!.multiplier;
+  const styleConfig = adminConfig.styles.find(s => s.id === style)!;
   const date = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
 
   const getBaseRate = () => {
