@@ -1,64 +1,68 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Copy, Share2, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import jsPDF from 'jspdf';
+import { usePresets } from '@/lib/presetContext';
 import {
-  type WorkMode, type TerrazzoStyle, type PatternType,
-  WORK_MODES, formatCurrency,
-} from '@/lib/pricingConfig';
-import { loadAdminConfig, calculateRateFromConfig, calculateTotalFromConfig } from '@/lib/usePricingConfig';
-import { calculateCastingMaterials, calculateGrindingMaterials, type MaterialItem } from '@/lib/materialCalculations';
+  WORK_MODES, formatCurrency, calculateRate, calculateTotal, computeMaterials,
+  type ComputedMaterial, type WorkMode,
+} from '@/lib/presetTypes';
 import { EditableTable } from './EditableTable';
 
-interface ClientData {
-  name: string;
-  phone: string;
-  location: string;
-}
+interface ClientData { name: string; phone: string; location: string; }
 
 interface LiveSummaryProps {
   client: ClientData;
   area: number;
   workMode: WorkMode;
-  style: TerrazzoStyle;
-  pattern: PatternType;
+  styleId: string;
+  patternId: string;
 }
 
-export const LiveSummary = ({ client, area, workMode, style, pattern }: LiveSummaryProps) => {
-  const { toast } = useToast();
-  const adminConfig = loadAdminConfig();
-  const rate = calculateRateFromConfig(adminConfig, style, workMode, pattern);
-  const total = calculateTotalFromConfig(adminConfig, area, style, workMode, pattern);
-  const modeName = WORK_MODES.find(m => m.id === workMode)!.name;
-  const styleName = adminConfig.styles.find(s => s.id === style)!.name;
-  const patternName = adminConfig.patterns.find(p => p.id === pattern)!.name;
-  const patternMultiplier = adminConfig.patterns.find(p => p.id === pattern)!.multiplier;
-  const styleConfig = adminConfig.styles.find(s => s.id === style)!;
-  const date = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
+interface MaterialRowVM { id: string; item: string; quantity: string; price: number; total: number; }
 
+const toRowVM = (m: ComputedMaterial, unit: string): MaterialRowVM => ({
+  id: m.id, item: m.item, quantity: `${m.qty} ${unit}`, price: m.unitPrice, total: m.total,
+});
+
+export const LiveSummary = ({ client, area, workMode, styleId, patternId }: LiveSummaryProps) => {
+  const { toast } = useToast();
+  const { activePreset } = usePresets();
+  const config = activePreset.config;
+
+  const style = config.styles.find(s => s.id === styleId)!;
+  const pattern = config.patterns.find(p => p.id === patternId)!;
+  const modeName = WORK_MODES.find(m => m.id === workMode)!.name;
+  const rate = calculateRate(config, styleId, workMode, patternId);
+  const total = calculateTotal(config, area, styleId, workMode, patternId);
+  const date = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
   const showMaterials = workMode === 'materials' || workMode === 'full';
 
-  const [castingData, setCastingData] = useState<MaterialItem[]>(() => calculateCastingMaterials(area));
-  const [grindingData, setGrindingData] = useState<MaterialItem[]>(() => calculateGrindingMaterials(area));
+  const initialCasting = () => computeMaterials(config, 'casting', area).map(m => toRowVM(m, config.materials.casting.find(x => x.id === m.id)?.unit ?? ''));
+  const initialGrinding = () => computeMaterials(config, 'grinding', area).map(m => toRowVM(m, config.materials.grinding.find(x => x.id === m.id)?.unit ?? ''));
 
-  const castingSubtotal = castingData.reduce((s, r) => s + r.total, 0);
-  const grindingSubtotal = grindingData.reduce((s, r) => s + r.total, 0);
-  const materialsGrandTotal = castingSubtotal + grindingSubtotal;
+  const [casting, setCasting] = useState<MaterialRowVM[]>(initialCasting);
+  const [grinding, setGrinding] = useState<MaterialRowVM[]>(initialGrinding);
 
-  const getBaseRate = () => {
-    if (workMode === 'materials') return styleConfig.materialsRate;
-    if (workMode === 'labour') return styleConfig.labourRate;
-    return styleConfig.materialsRate + styleConfig.labourRate;
-  };
+  // Recompute when preset or area changes
+  useEffect(() => { setCasting(initialCasting()); setGrinding(initialGrinding()); /* eslint-disable-next-line */ }, [area, activePreset.id]);
+
+  const castingSub = casting.reduce((s, r) => s + r.total, 0);
+  const grindingSub = grinding.reduce((s, r) => s + r.total, 0);
+  const materialsTotal = castingSub + grindingSub;
+
+  const baseRate = workMode === 'materials' ? style.materialsRate
+                  : workMode === 'labour'   ? style.labourRate
+                  : style.materialsRate + style.labourRate;
 
   const getQuoteText = () => {
-    let text = `
-TERRAZZO QUOTATION PRO
+    let t = `TERRAZZO QUOTATION PRO
 ========================
 Date: ${date}
+Preset: ${activePreset.name}
 
 CLIENT: ${client.name}
 Phone: ${client.phone}
@@ -67,203 +71,126 @@ Location: ${client.location}
 PROJECT:
 Area: ${area.toFixed(2)} m²
 Work Mode: ${modeName}
-Style: ${styleName}
-Pattern: ${patternName}
+Style: ${style.name}
+Pattern: ${pattern.name}
 
 Rate: ${formatCurrency(rate)}/m²
 GRAND TOTAL: ${formatCurrency(total)}`;
-
-    if (showMaterials) {
-      text += `\n\nMATERIAL COSTS: ${formatCurrency(materialsGrandTotal)}`;
-    }
-
-    text += `\n\nQuotation valid for 14 days.\nGenerated by Terrazzo Quotation Pro`;
-    return text.trim();
+    if (showMaterials) t += `\n\nMATERIAL COSTS: ${formatCurrency(materialsTotal)}`;
+    t += `\n\nQuotation valid for 14 days.\nGenerated by Terrazzo Quotation Pro`;
+    return t;
   };
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(getQuoteText());
     toast({ title: 'Copied', description: 'Quotation copied to clipboard' });
   };
+  const handleWhatsApp = () => window.open(`https://wa.me/?text=${encodeURIComponent(getQuoteText())}`, '_blank');
 
-  const handleWhatsApp = () => {
-    window.open(`https://wa.me/?text=${encodeURIComponent(getQuoteText())}`, '_blank');
-  };
-
-  const addMaterialTableToPDF = (doc: jsPDF, title: string, data: MaterialItem[], startY: number): number => {
+  const addMaterialPdf = (doc: jsPDF, title: string, rows: MaterialRowVM[], y0: number): number => {
     const pw = doc.internal.pageSize.getWidth();
     const ph = doc.internal.pageSize.getHeight();
-    let y = startY;
-
-    // Check page break
+    let y = y0;
     if (y > ph - 40) { doc.addPage(); y = 20; }
-
-    doc.setFontSize(12);
-    doc.setFont(undefined as any, 'bold');
-    doc.text(title, 20, y);
-    y += 8;
-
-    // Header row
-    doc.setFillColor(52, 120, 198);
-    doc.rect(20, y - 5, pw - 40, 8, 'F');
-    doc.setFontSize(9);
-    doc.setTextColor(255, 255, 255);
-    doc.setFont(undefined as any, 'bold');
-    doc.text('Item', 25, y);
-    doc.text('Qty', 95, y);
-    doc.text('Unit Price', 130, y);
+    doc.setFontSize(12); doc.setFont(undefined as any, 'bold');
+    doc.text(title, 20, y); y += 8;
+    doc.setFillColor(52, 120, 198); doc.rect(20, y - 5, pw - 40, 8, 'F');
+    doc.setFontSize(9); doc.setTextColor(255, 255, 255);
+    doc.text('Item', 25, y); doc.text('Qty', 95, y); doc.text('Unit Price', 130, y);
     doc.text('Total', pw - 25, y, { align: 'right' });
-    doc.setTextColor(0, 0, 0);
-    y += 8;
-
+    doc.setTextColor(0, 0, 0); y += 8;
     doc.setFont(undefined as any, 'normal');
-    doc.setFontSize(9);
-    data.forEach((row, i) => {
+    rows.forEach((row, i) => {
       if (y > ph - 20) { doc.addPage(); y = 20; }
-      if (i % 2 === 0) {
-        doc.setFillColor(245, 247, 250);
-        doc.rect(20, y - 4, pw - 40, 7, 'F');
-      }
-      doc.text(row.item, 25, y);
-      doc.text(row.quantity, 95, y);
+      if (i % 2 === 0) { doc.setFillColor(245, 247, 250); doc.rect(20, y - 4, pw - 40, 7, 'F'); }
+      doc.text(row.item, 25, y); doc.text(row.quantity, 95, y);
       doc.text(formatCurrency(row.price), 130, y);
       doc.text(formatCurrency(row.total), pw - 25, y, { align: 'right' });
       y += 7;
     });
-
-    // Subtotal
-    const subtotal = data.reduce((s, r) => s + r.total, 0);
-    doc.setFillColor(230, 235, 245);
-    doc.rect(20, y - 4, pw - 40, 8, 'F');
+    const sub = rows.reduce((s, r) => s + r.total, 0);
+    doc.setFillColor(230, 235, 245); doc.rect(20, y - 4, pw - 40, 8, 'F');
     doc.setFont(undefined as any, 'bold');
-    doc.text('Subtotal', 25, y);
-    doc.text(formatCurrency(subtotal), pw - 25, y, { align: 'right' });
-    y += 12;
-
-    return y;
+    doc.text('Subtotal', 25, y); doc.text(formatCurrency(sub), pw - 25, y, { align: 'right' });
+    return y + 12;
   };
 
   const handlePDF = () => {
     const doc = new jsPDF();
     const pw = doc.internal.pageSize.getWidth();
-
-    // Header
-    doc.setFontSize(22);
-    doc.setFont(undefined as any, 'bold');
+    doc.setFontSize(22); doc.setFont(undefined as any, 'bold');
     doc.text('TERRAZZO QUOTATION PRO', pw / 2, 22, { align: 'center' });
-    doc.setFontSize(10);
-    doc.setFont(undefined as any, 'normal');
-    doc.text(`Date: ${date}`, pw / 2, 30, { align: 'center' });
+    doc.setFontSize(10); doc.setFont(undefined as any, 'normal');
+    doc.text(`Date: ${date}    •    Preset: ${activePreset.name}`, pw / 2, 30, { align: 'center' });
+    doc.setDrawColor(52, 120, 198); doc.setLineWidth(0.8); doc.line(20, 35, pw - 20, 35);
 
-    doc.setDrawColor(52, 120, 198);
-    doc.setLineWidth(0.8);
-    doc.line(20, 35, pw - 20, 35);
-
-    // Client details
     let y = 45;
-    doc.setFontSize(13);
-    doc.setFont(undefined as any, 'bold');
+    doc.setFontSize(13); doc.setFont(undefined as any, 'bold');
     doc.text('CLIENT DETAILS', 20, y); y += 10;
-    doc.setFontSize(11);
-    doc.setFont(undefined as any, 'normal');
+    doc.setFontSize(11); doc.setFont(undefined as any, 'normal');
     doc.text(`Name: ${client.name}`, 20, y); y += 7;
     doc.text(`Phone: ${client.phone}`, 20, y); y += 7;
     doc.text(`Location: ${client.location}`, 20, y); y += 14;
 
-    // Project details
-    doc.setFontSize(13);
-    doc.setFont(undefined as any, 'bold');
+    doc.setFontSize(13); doc.setFont(undefined as any, 'bold');
     doc.text('PROJECT DETAILS', 20, y); y += 10;
-    doc.setFontSize(11);
-    doc.setFont(undefined as any, 'normal');
+    doc.setFontSize(11); doc.setFont(undefined as any, 'normal');
     doc.text(`Area: ${area.toFixed(2)} m²`, 20, y); y += 7;
     doc.text(`Work Mode: ${modeName}`, 20, y); y += 7;
-    doc.text(`Terrazzo Style: ${styleName}`, 20, y); y += 7;
-    doc.text(`Pattern: ${patternName}`, 20, y); y += 14;
+    doc.text(`Terrazzo Style: ${style.name}`, 20, y); y += 7;
+    doc.text(`Pattern: ${pattern.name}`, 20, y); y += 14;
 
-    // Cost breakdown table
-    doc.setFontSize(13);
-    doc.setFont(undefined as any, 'bold');
+    doc.setFontSize(13); doc.setFont(undefined as any, 'bold');
     doc.text('COST BREAKDOWN', 20, y); y += 10;
-
-    doc.setFillColor(52, 120, 198);
-    doc.rect(20, y - 5, pw - 40, 8, 'F');
-    doc.setFontSize(10);
-    doc.setTextColor(255, 255, 255);
-    doc.setFont(undefined as any, 'bold');
-    doc.text('Description', 25, y);
-    doc.text('Amount', pw - 25, y, { align: 'right' });
-    doc.setTextColor(0, 0, 0);
-    y += 10;
-
+    doc.setFillColor(52, 120, 198); doc.rect(20, y - 5, pw - 40, 8, 'F');
+    doc.setFontSize(10); doc.setTextColor(255, 255, 255);
+    doc.text('Description', 25, y); doc.text('Amount', pw - 25, y, { align: 'right' });
+    doc.setTextColor(0, 0, 0); y += 10;
     doc.setFont(undefined as any, 'normal');
     const rows = [
-      [`Base rate (${styleName})`, `${formatCurrency(getBaseRate())}/m²`],
-      [`Pattern adjustment (${patternName})`, `×${patternMultiplier.toFixed(2)}`],
+      [`Base rate (${style.name})`, `${formatCurrency(baseRate)}/m²`],
+      [`Pattern adjustment (${pattern.name})`, `×${pattern.multiplier.toFixed(2)}`],
       [`Adjusted rate per m²`, `${formatCurrency(rate)}/m²`],
       [`Project area`, `${area.toFixed(2)} m²`],
     ];
-
-    rows.forEach(([desc, val], i) => {
-      if (i % 2 === 0) {
-        doc.setFillColor(245, 247, 250);
-        doc.rect(20, y - 5, pw - 40, 8, 'F');
-      }
-      doc.text(desc, 25, y);
-      doc.text(val, pw - 25, y, { align: 'right' });
+    rows.forEach(([d, v], i) => {
+      if (i % 2 === 0) { doc.setFillColor(245, 247, 250); doc.rect(20, y - 5, pw - 40, 8, 'F'); }
+      doc.text(d, 25, y); doc.text(v, pw - 25, y, { align: 'right' });
       y += 8;
     });
-
-    // Grand total
     y += 4;
-    doc.setFillColor(52, 120, 198);
-    doc.rect(20, y - 6, pw - 40, 12, 'F');
-    doc.setFontSize(13);
-    doc.setFont(undefined as any, 'bold');
+    doc.setFillColor(52, 120, 198); doc.rect(20, y - 6, pw - 40, 12, 'F');
+    doc.setFontSize(13); doc.setFont(undefined as any, 'bold');
     doc.setTextColor(255, 255, 255);
     doc.text('GRAND TOTAL', 25, y + 1);
     doc.text(formatCurrency(total), pw - 25, y + 1, { align: 'right' });
-    doc.setTextColor(0, 0, 0);
-    y += 20;
+    doc.setTextColor(0, 0, 0); y += 20;
 
-    // Material breakdown tables in PDF
     if (showMaterials) {
-      y = addMaterialTableToPDF(doc, 'CASTING PHASE MATERIALS', castingData, y);
-      y = addMaterialTableToPDF(doc, 'GRINDING PHASE MATERIALS', grindingData, y);
-
-      // Materials grand total
+      if (casting.length) y = addMaterialPdf(doc, 'CASTING PHASE MATERIALS', casting, y);
+      if (grinding.length) y = addMaterialPdf(doc, 'GRINDING PHASE MATERIALS', grinding, y);
       const ph = doc.internal.pageSize.getHeight();
       if (y > ph - 25) { doc.addPage(); y = 20; }
-      doc.setFillColor(52, 120, 198);
-      doc.rect(20, y - 6, pw - 40, 12, 'F');
-      doc.setFontSize(12);
-      doc.setFont(undefined as any, 'bold');
+      doc.setFillColor(52, 120, 198); doc.rect(20, y - 6, pw - 40, 12, 'F');
+      doc.setFontSize(12); doc.setFont(undefined as any, 'bold');
       doc.setTextColor(255, 255, 255);
       doc.text('MATERIALS GRAND TOTAL', 25, y + 1);
-      doc.text(formatCurrency(materialsGrandTotal), pw - 25, y + 1, { align: 'right' });
-      doc.setTextColor(0, 0, 0);
-      y += 20;
+      doc.text(formatCurrency(materialsTotal), pw - 25, y + 1, { align: 'right' });
+      doc.setTextColor(0, 0, 0); y += 20;
     }
 
-    // Notes
-    doc.setFontSize(11);
-    doc.setFont(undefined as any, 'bold');
+    doc.setFontSize(11); doc.setFont(undefined as any, 'bold');
     doc.text('NOTES', 20, y); y += 8;
-    doc.setFontSize(9);
-    doc.setFont(undefined as any, 'normal');
-    const notes = [
+    doc.setFontSize(9); doc.setFont(undefined as any, 'normal');
+    [
       '• Prices based on stated area and standard site conditions.',
       '• Subfloor assumed level and structurally sound.',
       '• Quotation valid for 14 days from the date above.',
       '• Generated by Terrazzo Quotation Pro.',
-    ];
-    notes.forEach(n => { doc.text(n, 25, y); y += 6; });
+    ].forEach(n => { doc.text(n, 25, y); y += 6; });
 
-    // Footer
-    doc.setFontSize(8);
-    doc.setFont(undefined as any, 'italic');
+    doc.setFontSize(8); doc.setFont(undefined as any, 'italic');
     doc.text('Terrazzo Quotation Pro', pw / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
-
     doc.save(`Terrazzo_Quote_${client.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
     toast({ title: 'PDF Downloaded', description: 'Professional quotation saved' });
   };
@@ -275,7 +202,7 @@ GRAND TOTAL: ${formatCurrency(total)}`;
       <Card className="p-6">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-primary">Terrazzo Quotation Pro</h1>
-          <p className="text-sm text-muted-foreground">{date}</p>
+          <p className="text-sm text-muted-foreground">{date} • Preset: {activePreset.name}</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -293,97 +220,66 @@ GRAND TOTAL: ${formatCurrency(total)}`;
               <div><span className="font-medium">Area:</span> {area.toFixed(2)} m²</div>
               <div className="flex items-center gap-2 flex-wrap mt-2">
                 <Badge variant="secondary">{modeName}</Badge>
-                <Badge variant="secondary">{styleName}</Badge>
-                <Badge variant="secondary">{patternName}</Badge>
+                <Badge variant="secondary">{style.name}</Badge>
+                <Badge variant="secondary">{pattern.name}</Badge>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Cost breakdown */}
         <div className="border rounded-lg overflow-hidden mb-6">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-primary text-primary-foreground">
-                <th className="text-left p-3 font-semibold">Description</th>
-                <th className="text-right p-3 font-semibold">Amount</th>
-              </tr>
-            </thead>
+            <thead><tr className="bg-primary text-primary-foreground">
+              <th className="text-left p-3 font-semibold">Description</th>
+              <th className="text-right p-3 font-semibold">Amount</th>
+            </tr></thead>
             <tbody>
-              <tr className="border-b bg-muted/30">
-                <td className="p-3">Base rate ({styleName})</td>
-                <td className="p-3 text-right">{formatCurrency(getBaseRate())}/m²</td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3">Pattern adjustment ({patternName})</td>
-                <td className="p-3 text-right">×{patternMultiplier.toFixed(2)}</td>
-              </tr>
-              <tr className="border-b bg-muted/30">
-                <td className="p-3 font-medium">Adjusted rate per m²</td>
-                <td className="p-3 text-right font-medium">{formatCurrency(rate)}/m²</td>
-              </tr>
-              <tr className="border-b">
-                <td className="p-3">Project area</td>
-                <td className="p-3 text-right">{area.toFixed(2)} m²</td>
-              </tr>
+              <tr className="border-b bg-muted/30"><td className="p-3">Base rate ({style.name})</td><td className="p-3 text-right">{formatCurrency(baseRate)}/m²</td></tr>
+              <tr className="border-b"><td className="p-3">Pattern adjustment ({pattern.name})</td><td className="p-3 text-right">×{pattern.multiplier.toFixed(2)}</td></tr>
+              <tr className="border-b bg-muted/30"><td className="p-3 font-medium">Adjusted rate per m²</td><td className="p-3 text-right font-medium">{formatCurrency(rate)}/m²</td></tr>
+              <tr className="border-b"><td className="p-3">Project area</td><td className="p-3 text-right">{area.toFixed(2)} m²</td></tr>
             </tbody>
-            <tfoot>
-              <tr className="bg-primary text-primary-foreground">
-                <td className="p-3 font-bold text-lg">GRAND TOTAL</td>
-                <td className="p-3 text-right font-bold text-lg">{formatCurrency(total)}</td>
-              </tr>
-            </tfoot>
+            <tfoot><tr className="bg-primary text-primary-foreground">
+              <td className="p-3 font-bold text-lg">GRAND TOTAL</td>
+              <td className="p-3 text-right font-bold text-lg">{formatCurrency(total)}</td>
+            </tr></tfoot>
           </table>
         </div>
 
-        {/* Notes */}
-        <div className="text-xs text-muted-foreground space-y-1 mb-6">
+        <div className="text-xs text-muted-foreground space-y-1">
           <p>• Prices based on stated area and standard site conditions.</p>
           <p>• Subfloor assumed level and structurally sound.</p>
           <p>• Quotation valid for 14 days.</p>
         </div>
       </Card>
 
-      {/* Material breakdown tables */}
       {showMaterials && (
         <>
-          <EditableTable
-            title="Casting Materials"
-            phase="casting"
-            data={castingData}
-            formatCurrency={formatCurrency}
-            onDataChange={setCastingData}
-          />
-          <EditableTable
-            title="Grinding Materials"
-            phase="grinding"
-            data={grindingData}
-            formatCurrency={formatCurrency}
-            onDataChange={setGrindingData}
-          />
+          {casting.length > 0 && (
+            <EditableTable title="Casting Materials" phase="casting" data={casting} formatCurrency={formatCurrency} onDataChange={setCasting} />
+          )}
+          {grinding.length > 0 && (
+            <EditableTable title="Grinding Materials" phase="grinding" data={grinding} formatCurrency={formatCurrency} onDataChange={setGrinding} />
+          )}
           <Card className="p-4 bg-primary/5 border-primary/20">
             <div className="flex items-center justify-between">
               <span className="font-bold text-lg">Materials Grand Total</span>
-              <span className="font-bold text-xl text-primary">{formatCurrency(materialsGrandTotal)}</span>
+              <span className="font-bold text-xl text-primary">{formatCurrency(materialsTotal)}</span>
             </div>
           </Card>
         </>
       )}
 
-      {/* Action buttons */}
       <Card className="p-6">
         <div className="flex flex-col sm:flex-row gap-3">
           <Button onClick={handleCopy} variant="outline" className="flex-1">
-            <Copy className="h-4 w-4 mr-2" />
-            Copy to Clipboard
+            <Copy className="h-4 w-4 mr-2" /> Copy to Clipboard
           </Button>
           <Button onClick={handleWhatsApp} className="flex-1 bg-success hover:bg-success/90">
-            <Share2 className="h-4 w-4 mr-2" />
-            Share on WhatsApp
+            <Share2 className="h-4 w-4 mr-2" /> Share on WhatsApp
           </Button>
           <Button onClick={handlePDF} variant="outline" className="flex-1">
-            <Download className="h-4 w-4 mr-2" />
-            Download PDF
+            <Download className="h-4 w-4 mr-2" /> Download PDF
           </Button>
         </div>
       </Card>
