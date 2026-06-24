@@ -1,58 +1,54 @@
-import { useState } from 'react';
-import { useAdminConfig, type AdminConfig } from '@/lib/usePricingConfig';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { useEffect, useState } from 'react';
+import { useNavigate, Navigate } from 'react-router-dom';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { formatCurrency } from '@/lib/pricingConfig';
-import { ArrowLeft, Save, RotateCcw, Settings } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { ArrowLeft, Save, Settings, AlertTriangle, LogOut } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { usePresets } from '@/lib/presetContext';
+import { PresetSwitcher } from '@/components/admin/PresetSwitcher';
+import { StylesEditor } from '@/components/admin/StylesEditor';
+import { PatternsEditor } from '@/components/admin/PatternsEditor';
+import { MaterialsEditor } from '@/components/admin/MaterialsEditor';
+import type { PresetConfig } from '@/lib/presetTypes';
 import { toast } from 'sonner';
 
 const AdminSettings = () => {
   const navigate = useNavigate();
-  const { config, save, reset } = useAdminConfig();
-  const [draft, setDraft] = useState<AdminConfig>(structuredClone(config));
+  const { session, loading: authLoading, signOut } = useAuth();
+  const { activePreset, saveActiveConfig, dbReady, error } = usePresets();
 
-  const updateStyleRate = (index: number, field: 'materialsRate' | 'labourRate', value: string) => {
-    const num = parseInt(value) || 0;
-    setDraft(prev => {
-      const updated = structuredClone(prev);
-      updated.styles[index][field] = num;
-      return updated;
-    });
-  };
+  const [draft, setDraft] = useState<PresetConfig>(activePreset.config);
+  const [saving, setSaving] = useState(false);
 
-  const updatePatternMultiplier = (index: number, value: string) => {
-    const num = parseFloat(value) || 1;
-    setDraft(prev => {
-      const updated = structuredClone(prev);
-      updated.patterns[index].multiplier = num;
-      return updated;
-    });
-  };
+  // Reset draft whenever the active preset changes
+  useEffect(() => { setDraft(structuredClone(activePreset.config)); }, [activePreset.id, activePreset.config]);
 
-  const handleSave = () => {
-    save(draft);
-    toast.success('Settings saved successfully');
-  };
+  if (authLoading) return <div className="p-8 text-center text-muted-foreground">Loading…</div>;
+  if (!session) return <Navigate to="/auth?next=/admin" replace />;
 
-  const handleReset = () => {
-    reset();
-    setDraft(structuredClone({
-      styles: [...config.styles],
-      patterns: [...config.patterns],
-    }));
-    // Reload defaults after reset
-    window.location.reload();
+  const isBuiltinDefault = activePreset.id.startsWith('builtin-');
+  const ownsActive = !!activePreset.owner_id && activePreset.owner_id === session.user.id;
+  const canSave = !isBuiltinDefault && ownsActive;
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await saveActiveConfig(draft);
+      toast.success('Saved');
+    } catch (e: any) {
+      toast.error(e?.message ?? 'Save failed');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6">
+      <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
               <ArrowLeft className="h-5 w-5" />
@@ -62,103 +58,118 @@ const AdminSettings = () => {
                 <Settings className="h-6 w-6 text-primary" />
                 Admin Settings
               </h1>
-              <p className="text-sm text-muted-foreground">Adjust pricing rates and pattern multipliers</p>
+              <p className="text-sm text-muted-foreground">Manage pricing presets, styles, patterns, materials & formulas</p>
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleReset} className="gap-2">
-              <RotateCcw className="h-4 w-4" />
-              Reset Defaults
-            </Button>
-            <Button onClick={handleSave} className="gap-2">
-              <Save className="h-4 w-4" />
-              Save Changes
+            <Button variant="outline" size="sm" onClick={() => { signOut(); navigate('/'); }}>
+              <LogOut className="h-4 w-4 mr-1" /> Sign out
             </Button>
           </div>
         </div>
 
-        {/* Style Rates */}
+        {!dbReady && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Backend setup required</AlertTitle>
+            <AlertDescription>
+              The <code className="font-mono">pricing_presets</code> table isn't reachable. Open your Supabase dashboard's SQL editor and run the migration in <code className="font-mono">supabase/migrations/20260624000000_pricing_presets.sql</code>. Until then, the app falls back to built-in defaults.
+              {error && <div className="mt-2 text-xs opacity-80">{error}</div>}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Preset switcher */}
         <Card>
           <CardHeader>
-            <CardTitle>Terrazzo Style Rates (UGX per m²)</CardTitle>
-            <CardDescription>Set the base materials and labour rates for each terrazzo style</CardDescription>
+            <CardTitle>Active Preset</CardTitle>
+            <CardDescription>
+              Switch presets to manage a different configuration. Edits below apply to the selected preset.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Style</TableHead>
-                  <TableHead>Materials Rate</TableHead>
-                  <TableHead>Labour Rate</TableHead>
-                  <TableHead>Full Package</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {draft.styles.map((style, i) => (
-                  <TableRow key={style.id}>
-                    <TableCell className="font-medium">{style.name}</TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        value={style.materialsRate}
-                        onChange={(e) => updateStyleRate(i, 'materialsRate', e.target.value)}
-                        className="w-32"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        value={style.labourRate}
-                        onChange={(e) => updateStyleRate(i, 'labourRate', e.target.value)}
-                        className="w-32"
-                      />
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatCurrency(style.materialsRate + style.labourRate)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <PresetSwitcher manage />
+            {isBuiltinDefault && (
+              <p className="text-sm text-muted-foreground mt-3">
+                The <strong>Default</strong> preset is read-only. Click <strong>Duplicate</strong> to create your own editable copy.
+              </p>
+            )}
+            {!isBuiltinDefault && !ownsActive && (
+              <p className="text-sm text-muted-foreground mt-3">You can view this preset but only its owner can edit it.</p>
+            )}
           </CardContent>
         </Card>
 
-        {/* Pattern Multipliers */}
+        {/* Editor tabs */}
         <Card>
-          <CardHeader>
-            <CardTitle>Pattern Multipliers</CardTitle>
-            <CardDescription>Set cost multipliers for each pattern type (1.0 = no change, 1.25 = +25%)</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-3">
+            <div>
+              <CardTitle>{activePreset.name}</CardTitle>
+              <CardDescription>Edit-in-place. Click "Save changes" to persist.</CardDescription>
+            </div>
+            <Button onClick={handleSave} disabled={!canSave || saving} className="gap-2">
+              <Save className="h-4 w-4" /> {saving ? 'Saving…' : 'Save changes'}
+            </Button>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Pattern</TableHead>
-                  <TableHead>Multiplier</TableHead>
-                  <TableHead>Effect</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {draft.patterns.map((pattern, i) => (
-                  <TableRow key={pattern.id}>
-                    <TableCell className="font-medium">{pattern.name}</TableCell>
-                    <TableCell>
-                      <Input
-                        type="number"
-                        step="0.05"
-                        min="1"
-                        value={pattern.multiplier}
-                        onChange={(e) => updatePatternMultiplier(i, e.target.value)}
-                        className="w-28"
-                      />
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {pattern.multiplier === 1 ? 'No change' : `+${Math.round((pattern.multiplier - 1) * 100)}% cost`}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <Tabs defaultValue="styles" className="w-full">
+              <TabsList className="grid grid-cols-2 sm:grid-cols-5 w-full">
+                <TabsTrigger value="styles">Styles</TabsTrigger>
+                <TabsTrigger value="patterns">Patterns</TabsTrigger>
+                <TabsTrigger value="prices-c">Casting Prices</TabsTrigger>
+                <TabsTrigger value="prices-g">Grinding Prices</TabsTrigger>
+                <TabsTrigger value="formulas">Formulas</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="styles" className="pt-4">
+                <StylesEditor rows={draft.styles} onChange={(rows) => setDraft({ ...draft, styles: rows })} />
+              </TabsContent>
+
+              <TabsContent value="patterns" className="pt-4">
+                <PatternsEditor rows={draft.patterns} onChange={(rows) => setDraft({ ...draft, patterns: rows })} />
+              </TabsContent>
+
+              <TabsContent value="prices-c" className="pt-4">
+                <MaterialsEditor
+                  phase="casting"
+                  rows={draft.materials.casting}
+                  pricesOnly
+                  onChange={(rows) => setDraft({ ...draft, materials: { ...draft.materials, casting: rows } })}
+                />
+              </TabsContent>
+
+              <TabsContent value="prices-g" className="pt-4">
+                <MaterialsEditor
+                  phase="grinding"
+                  rows={draft.materials.grinding}
+                  pricesOnly
+                  onChange={(rows) => setDraft({ ...draft, materials: { ...draft.materials, grinding: rows } })}
+                />
+              </TabsContent>
+
+              <TabsContent value="formulas" className="pt-4 space-y-6">
+                <p className="text-sm text-muted-foreground">
+                  Each material's quantity is computed from project area. Choose <em>area ÷</em> or <em>area ×</em> and set the factor.
+                  Example: <code className="font-mono">area ÷ 2.8</code> means one bag of white floor stones covers 2.8 m².
+                </p>
+                <div className="space-y-2">
+                  <h3 className="font-semibold">Casting phase</h3>
+                  <MaterialsEditor
+                    phase="casting"
+                    rows={draft.materials.casting}
+                    onChange={(rows) => setDraft({ ...draft, materials: { ...draft.materials, casting: rows } })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="font-semibold">Grinding phase</h3>
+                  <MaterialsEditor
+                    phase="grinding"
+                    rows={draft.materials.grinding}
+                    onChange={(rows) => setDraft({ ...draft, materials: { ...draft.materials, grinding: rows } })}
+                  />
+                </div>
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       </div>

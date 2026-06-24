@@ -1,5 +1,5 @@
 import { Card } from '@/components/ui/card';
-import { WORK_MODES, type WorkMode } from '@/lib/pricingConfig';
+import { type WorkMode, WORK_MODES } from '@/lib/presetTypes';
 import { CheckCircle, Package, Wrench, Layers } from 'lucide-react';
 
 const ICONS: Record<WorkMode, React.ReactNode> = {
@@ -22,9 +22,7 @@ export const WorkModeSelector = ({ selected, onSelect }: WorkModeSelectorProps) 
           <Card
             key={mode.id}
             className={`p-5 cursor-pointer transition-all duration-200 ${
-              selected === mode.id
-                ? 'ring-2 ring-primary bg-primary/5'
-                : 'hover:bg-muted/50'
+              selected === mode.id ? 'ring-2 ring-primary bg-primary/5' : 'hover:bg-muted/50'
             }`}
             onClick={() => onSelect(mode.id)}
           >
@@ -34,9 +32,7 @@ export const WorkModeSelector = ({ selected, onSelect }: WorkModeSelectorProps) 
                 <h3 className="font-semibold text-lg">{mode.name}</h3>
                 <p className="text-sm text-muted-foreground">{mode.description}</p>
               </div>
-              {selected === mode.id && (
-                <CheckCircle className="h-5 w-5 text-primary shrink-0" />
-              )}
+              {selected === mode.id && <CheckCircle className="h-5 w-5 text-primary shrink-0" />}
             </div>
           </Card>
         ))}
