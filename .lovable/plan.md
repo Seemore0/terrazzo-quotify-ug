@@ -1,110 +1,70 @@
-# Expanded Admin Controls + Cloud-Synced Presets
+## Goal
+Transform the existing Terrazzo Quotation app into a production SaaS for Ugandan contractors with full CRM, quotation history, analytics, PDF/WhatsApp/email sharing, audit trails, PWA support, and hardened security.
 
-Add fine-grained admin controls (material prices, calculation formulas, custom styles & patterns) and let users save/switch between named presets ("Residential", "Commercial", "Budget", etc.) synced across devices via login.
+## Prerequisite (blocker)
+Backend work (quotations table, customers, audit trail, RLS, edge functions for email/PDF storage) requires a live database. The project is currently wired to an external Supabase project (`tlzrmbedscmnmuzhfwkh`) that I cannot run migrations against. Two options:
 
----
+- **A. Enable Lovable Cloud** — I can run all migrations and deploy edge functions directly. Requires topping up credits (previously blocked). Existing `pricing_presets` data won't carry over, but nothing was actually created there yet.
+- **B. Keep external Supabase** — I write all SQL into `db/` files; you paste each file into the Supabase SQL editor. Edge functions you'd deploy via Supabase CLI.
 
-## What you'll be able to control in `/admin`
+I'll assume **A (Lovable Cloud)** for the plan. Tell me if you want B.
 
-### 1. Terrazzo Styles (existing + expanded)
-- Add new style rows, rename, delete
-- Edit materials rate (UGX/m²)
-- Edit labour rate (UGX/m²)
-- Toggle active/inactive (hide from selector without deleting)
+## Build phases
 
-### 2. Patterns (existing + expanded)
-- Add new patterns, rename, delete
-- Edit multiplier (e.g. 1.10 = +10%)
-- Toggle active/inactive
+### Phase 1 — Database schema (migrations)
+- `customers` (id, name, phone UNIQUE, email, location, total_projects, total_spent, last_project_date, owner_id, timestamps)
+- `quotations` (id, quote_number UNIQUE, customer_id FK, snapshot of customer fields, area_m2, floor_type, thickness, materials_json, total_cost, profit, status enum [draft|sent|approved|rejected|completed|archived], pdf_url, owner_id, timestamps)
+- `quote_counters` (year int PK, last_seq int) + `next_quote_number(year)` SECURITY DEFINER fn → `TQ-YYYY-####`, unique even after delete
+- `price_history` (material_name, old_price, new_price, changed_by, changed_at)
+- `user_roles` + `app_role` enum + `has_role()` (admin-only pricing edits)
+- RLS on every table; GRANTs per Lovable rules; triggers to maintain customer aggregates and log price changes
 
-### 3. Material Unit Prices (NEW)
-Two tables (Casting + Grinding), each row editable:
-- Item name
-- Unit label (bag, kg, liter, etc.)
-- Price per unit (UGX)
-- Add new rows / delete rows
+### Phase 2 — Data layer & hooks
+- `useQuotations`, `useCustomers`, `useDashboardStats`, `usePriceHistory` (React Query)
+- Migrate `presetContext` to use Supabase reads, keep localStorage fallback for offline
 
-### 4. Material Calculation Formulas (NEW)
-For each material, edit the formula parameters:
-- Type: `area ÷ X` or `area × X`
-- Coefficient (the number you can adjust)
-- Example: "Stones floor white" → `area ÷ 2` then × (5/7); expose both divisors
+### Phase 3 — Pages & navigation
+- App shell with sidebar: Dashboard / Quotes / Customers / Reports / Settings
+- `/dashboard` — stat cards + monthly revenue chart (recharts)
+- `/quotes` — list, filters (status/date/customer), search, actions (view/edit/duplicate/PDF/archive)
+- `/quotes/:id` — detail + edit
+- `/customers` — list + search
+- `/customers/:id` — profile, quote history, "New quote" CTA
+- `/reports` — exports (JSON/Excel via xlsx)
+- `/settings` — existing admin tabs + price history audit log
+- Global search command palette (cmd+k) over customers/quotes/phones/quote#s
 
-Approach: expose each formula as `{ operation: 'divide' | 'multiply', factor: number }` with a friendly label. Users adjust the factor without touching code.
+### Phase 4 — Quotation wizard upgrades
+- On submit: create/find customer by phone, allocate quote_number, persist quotation
+- Status workflow buttons
+- Duplicate quote action
 
-### 5. Presets (NEW)
-- Save the current full admin config as a named preset
-- List, load, rename, duplicate, delete presets
-- "Active preset" indicator shown on the quote wizard header
-- Switch preset before generating a quote
+### Phase 5 — PDF, WhatsApp, Email
+- Rewrite jsPDF template: logo, quote #, customer block, itemized materials table (autotable), subtotal/tax/total, admin-toggle profit section, T&Cs, signature, footer contacts
+- WhatsApp share: `https://wa.me/<phone>?text=<encoded summary + PDF link>`
+- Email: edge function using Lovable scaffolded auth/transactional email infra (`send-transactional-email`) with PDF stored in Supabase Storage `quotes` bucket → signed URL in email
 
----
+### Phase 6 — PWA + mobile
+- Manifest + icons (manifest-only first; offline path only if you confirm offline quotation creation is needed — that adds sync-queue complexity)
+- Mobile polish: sticky "Generate Quote" CTA, `inputMode="decimal"`, larger tap targets, skeleton loaders
 
-## Persistence (Cloud-synced)
+### Phase 7 — Security & validation
+- Zod schemas on every form
+- RLS verified via test queries
+- Admin role gating on `/settings` pricing tabs and price_history
+- Run security scan at the end
 
-Backend is already connected (Supabase project "Nick"). I'll add:
+## Technical notes
+- Stack stays: React 18 + Vite + Tailwind + shadcn + TanStack Query + jsPDF + jspdf-autotable + recharts + xlsx + zod
+- Quote number generation is atomic via Postgres function with row lock on `quote_counters`
+- Customer aggregates (total_projects/total_spent/last_project_date) maintained by trigger on quotations
+- Soft delete = `status='archived'`; list views exclude archived by default
+- Offline mode: defer unless explicitly requested — true offline-with-sync is a multi-day project on its own
 
-- **Authentication**: email/password + Google sign-in (Lovable Cloud defaults)
-- **Auth pages**: `/auth` (sign in / sign up), protected `/admin` route
-- **Public quoting**: the main wizard stays usable without login — anonymous users use the default config and any "public" preset marked by an admin
-- **Tables** (new):
-  - `pricing_presets` — id, owner_id, name, is_default, is_public, created_at
-  - `preset_styles` — preset_id, style_key, name, materials_rate, labour_rate, sort, active
-  - `preset_patterns` — preset_id, pattern_key, name, multiplier, sort, active
-  - `preset_materials` — preset_id, phase ('casting'|'grinding'), item_key, name, unit, unit_price, qty_operation, qty_factor, sort, active
-- **RLS**: owners can CRUD their own presets; everyone can read presets marked `is_public`
-- **Migration seed**: insert one "Default" public preset matching today's hardcoded values so nothing breaks for anonymous users
+## Scope confirmations needed
+1. **Backend**: Lovable Cloud (A) or keep external Supabase (B)?
+2. **Offline PWA**: installable + works offline with sync queue (large effort) OR just installable home-screen app (fast)?
+3. **Email**: set up Lovable Emails (needs domain) or skip for now?
+4. **Logo**: do you have a logo file to use, or want me to generate a placeholder?
 
----
-
-## UI changes
-
-### `/admin` page restructured into tabs
-```text
-┌─────────────────────────────────────────┐
-│  Active preset: [Residential ▼] [Save as…] [New] │
-├─────────────────────────────────────────┤
-│ [Styles] [Patterns] [Materials] [Formulas] │
-├─────────────────────────────────────────┤
-│   (editable table for current tab)      │
-└─────────────────────────────────────────┘
-```
-
-Each tab is an editable table with inline add/delete row, edit-in-place, and a "Save changes" button that writes to the active preset.
-
-### Wizard header
-- Small preset selector chip (top-right) so you can switch presets per-quote without leaving the wizard
-- Anonymous users see only public presets
-
-### Auth
-- "Sign in" button in header when logged out
-- "Admin" link only visible when logged in
-- `/admin` redirects to `/auth` if not logged in
-
----
-
-## Migration path
-
-- Default preset is seeded from your existing values — current users see no change
-- The existing localStorage admin config is migrated once on first login into a private preset called "My Settings"
-- After that, all reads/writes go through Supabase
-
----
-
-## Files
-
-- New: `supabase/migrations/*.sql` — tables, RLS, default preset seed
-- New: `src/pages/Auth.tsx` — sign in / up
-- New: `src/hooks/useAuth.ts` — session listener
-- New: `src/lib/presets.ts` — preset CRUD + active-preset state
-- Rewrite: `src/pages/AdminSettings.tsx` — tabs + preset switcher
-- New: `src/components/admin/StylesEditor.tsx`, `PatternsEditor.tsx`, `MaterialsEditor.tsx`, `FormulasEditor.tsx`
-- New: `src/components/PresetSwitcher.tsx` — used in wizard + admin headers
-- Update: `src/lib/pricingConfig.ts`, `src/lib/materialCalculations.ts`, `src/components/LiveSummary.tsx`, `src/components/QuotationApp.tsx` — read from active preset instead of constants
-- Update: `src/App.tsx` — `/auth` route, guard for `/admin`
-
----
-
-## Out of scope (can add next)
-- Per-quote one-off overrides (wastage %, transport, VAT) — best done as a "Project Settings" step in the wizard once presets are in
-- Team sharing of private presets (today: yours-only or public-to-everyone)
+Once you confirm, I'll execute phases 1→7 in order, committing after each phase so you can preview progress.
