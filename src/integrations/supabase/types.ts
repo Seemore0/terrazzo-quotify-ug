@@ -7,794 +7,308 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "12.2.3 (519615d)"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
-      activity_goals: {
+      customers: {
         Row: {
+          archived: boolean
           created_at: string
-          end_date: string
-          goal_type: string
+          email: string | null
           id: string
-          is_completed: boolean | null
-          start_date: string
-          target_value: number
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          end_date: string
-          goal_type: string
-          id?: string
-          is_completed?: boolean | null
-          start_date: string
-          target_value: number
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          end_date?: string
-          goal_type?: string
-          id?: string
-          is_completed?: boolean | null
-          start_date?: string
-          target_value?: number
-          user_id?: string
-        }
-        Relationships: []
-      }
-      chat_messages: {
-        Row: {
-          created_at: string
-          id: string
-          is_ai: boolean
-          message: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_ai?: boolean
-          message: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          is_ai?: boolean
-          message?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      downloads: {
-        Row: {
-          downloaded_at: string | null
-          expires_at: string | null
-          id: string
-          movie_id: number
-          user_id: string
-        }
-        Insert: {
-          downloaded_at?: string | null
-          expires_at?: string | null
-          id?: string
-          movie_id: number
-          user_id: string
-        }
-        Update: {
-          downloaded_at?: string | null
-          expires_at?: string | null
-          id?: string
-          movie_id?: number
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "downloads_movie_id_fkey"
-            columns: ["movie_id"]
-            isOneToOne: false
-            referencedRelation: "movies"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      genres: {
-        Row: {
-          id: number
+          last_project_date: string | null
+          location: string | null
           name: string
-        }
-        Insert: {
-          id: number
-          name: string
-        }
-        Update: {
-          id?: number
-          name?: string
-        }
-        Relationships: []
-      }
-      highscores: {
-        Row: {
-          created_at: string | null
-          id: string
-          player_name: string | null
-          score: number
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          player_name?: string | null
-          score: number
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          player_name?: string | null
-          score?: number
-          user_id?: string
-        }
-        Relationships: []
-      }
-      movie_details: {
-        Row: {
-          created_at: string
-          genres: Json | null
-          id: number
-          ratings: Json | null
-          runtime: number | null
-          status: string | null
-          tagline: string | null
+          notes: string | null
+          owner_id: string
+          phone: string
+          total_projects: number
+          total_spent: number
           updated_at: string
-          videos: Json | null
         }
         Insert: {
+          archived?: boolean
           created_at?: string
-          genres?: Json | null
-          id: number
-          ratings?: Json | null
-          runtime?: number | null
-          status?: string | null
-          tagline?: string | null
+          email?: string | null
+          id?: string
+          last_project_date?: string | null
+          location?: string | null
+          name: string
+          notes?: string | null
+          owner_id: string
+          phone: string
+          total_projects?: number
+          total_spent?: number
           updated_at?: string
-          videos?: Json | null
         }
         Update: {
+          archived?: boolean
           created_at?: string
-          genres?: Json | null
-          id?: number
-          ratings?: Json | null
-          runtime?: number | null
-          status?: string | null
-          tagline?: string | null
+          email?: string | null
+          id?: string
+          last_project_date?: string | null
+          location?: string | null
+          name?: string
+          notes?: string | null
+          owner_id?: string
+          phone?: string
+          total_projects?: number
+          total_spent?: number
           updated_at?: string
-          videos?: Json | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "movie_details_id_fkey"
-            columns: ["id"]
-            isOneToOne: true
-            referencedRelation: "movies"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
-      movie_reviews: {
+      price_history: {
         Row: {
-          created_at: string | null
+          changed_at: string
+          changed_by: string | null
           id: string
-          movie_id: number
-          rating: number
-          review_text: string | null
-          updated_at: string | null
-          user_id: string
+          item_key: string
+          item_type: string
+          new_value: number | null
+          old_value: number | null
+          preset_id: string | null
         }
         Insert: {
-          created_at?: string | null
+          changed_at?: string
+          changed_by?: string | null
           id?: string
-          movie_id: number
-          rating: number
-          review_text?: string | null
-          updated_at?: string | null
-          user_id: string
+          item_key: string
+          item_type: string
+          new_value?: number | null
+          old_value?: number | null
+          preset_id?: string | null
         }
         Update: {
-          created_at?: string | null
+          changed_at?: string
+          changed_by?: string | null
           id?: string
-          movie_id?: number
-          rating?: number
-          review_text?: string | null
-          updated_at?: string | null
-          user_id?: string
+          item_key?: string
+          item_type?: string
+          new_value?: number | null
+          old_value?: number | null
+          preset_id?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "movie_reviews_movie_id_fkey"
-            columns: ["movie_id"]
+            foreignKeyName: "price_history_preset_id_fkey"
+            columns: ["preset_id"]
             isOneToOne: false
-            referencedRelation: "movies"
+            referencedRelation: "pricing_presets"
             referencedColumns: ["id"]
           },
         ]
       }
-      movie_shares: {
+      pricing_presets: {
         Row: {
-          created_at: string | null
-          id: string
-          message: string | null
-          movie_id: number
-          shared_with: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          message?: string | null
-          movie_id: number
-          shared_with: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          message?: string | null
-          movie_id?: number
-          shared_with?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "movie_shares_movie_id_fkey"
-            columns: ["movie_id"]
-            isOneToOne: false
-            referencedRelation: "movies"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      movies: {
-        Row: {
-          backdrop_path: string | null
-          category: string | null
+          config: Json
           created_at: string
-          genre_ids: Json | null
-          id: number
-          media_type: string | null
-          overview: string | null
-          popularity: number | null
-          poster_path: string | null
-          release_date: string | null
-          title: string
-          vote_average: number | null
-          vote_count: number | null
+          id: string
+          is_public: boolean
+          name: string
+          owner_id: string | null
+          updated_at: string
         }
         Insert: {
-          backdrop_path?: string | null
-          category?: string | null
+          config: Json
           created_at?: string
-          genre_ids?: Json | null
-          id: number
-          media_type?: string | null
-          overview?: string | null
-          popularity?: number | null
-          poster_path?: string | null
-          release_date?: string | null
-          title: string
-          vote_average?: number | null
-          vote_count?: number | null
+          id?: string
+          is_public?: boolean
+          name: string
+          owner_id?: string | null
+          updated_at?: string
         }
         Update: {
-          backdrop_path?: string | null
-          category?: string | null
+          config?: Json
           created_at?: string
-          genre_ids?: Json | null
-          id?: number
-          media_type?: string | null
-          overview?: string | null
-          popularity?: number | null
-          poster_path?: string | null
-          release_date?: string | null
-          title?: string
-          vote_average?: number | null
-          vote_count?: number | null
+          id?: string
+          is_public?: boolean
+          name?: string
+          owner_id?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
       profiles: {
         Row: {
-          company: string | null
+          company_name: string | null
           created_at: string
-          full_name: string | null
+          display_name: string | null
           id: string
-          location: string | null
           phone: string | null
           updated_at: string
-          username: string | null
         }
         Insert: {
-          company?: string | null
+          company_name?: string | null
           created_at?: string
-          full_name?: string | null
+          display_name?: string | null
           id: string
-          location?: string | null
           phone?: string | null
           updated_at?: string
-          username?: string | null
         }
         Update: {
-          company?: string | null
+          company_name?: string | null
           created_at?: string
-          full_name?: string | null
+          display_name?: string | null
           id?: string
-          location?: string | null
           phone?: string | null
           updated_at?: string
-          username?: string | null
         }
         Relationships: []
       }
-      site_settings: {
+      quotations: {
         Row: {
-          allowed_formats: string
-          analytics_enabled: boolean
-          cache_enabled: boolean
-          cdn_url: string | null
+          area_m2: number
           created_at: string
-          enable_comments: boolean
-          enable_downloads: boolean
-          enable_ratings: boolean
-          enable_registration: boolean
-          id: number
-          maintenance_mode: boolean
-          max_file_size_mb: number
-          primary_color: string
-          secondary_color: string
-          site_description: string | null
-          site_logo_url: string | null
-          site_name: string
-          social_login_enabled: boolean
-          updated_at: string
-        }
-        Insert: {
-          allowed_formats?: string
-          analytics_enabled?: boolean
-          cache_enabled?: boolean
-          cdn_url?: string | null
-          created_at?: string
-          enable_comments?: boolean
-          enable_downloads?: boolean
-          enable_ratings?: boolean
-          enable_registration?: boolean
-          id?: number
-          maintenance_mode?: boolean
-          max_file_size_mb?: number
-          primary_color?: string
-          secondary_color?: string
-          site_description?: string | null
-          site_logo_url?: string | null
-          site_name?: string
-          social_login_enabled?: boolean
-          updated_at?: string
-        }
-        Update: {
-          allowed_formats?: string
-          analytics_enabled?: boolean
-          cache_enabled?: boolean
-          cdn_url?: string | null
-          created_at?: string
-          enable_comments?: boolean
-          enable_downloads?: boolean
-          enable_ratings?: boolean
-          enable_registration?: boolean
-          id?: number
-          maintenance_mode?: boolean
-          max_file_size_mb?: number
-          primary_color?: string
-          secondary_color?: string
-          site_description?: string | null
-          site_logo_url?: string | null
-          site_name?: string
-          social_login_enabled?: boolean
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      uploaded_movies: {
-        Row: {
-          backdrop_file_size: number | null
-          backdrop_url: string | null
-          budget: number | null
-          cast_members: string[] | null
-          country: string | null
-          created_at: string | null
-          director: string | null
-          duration: number | null
-          genre_ids: number[] | null
+          customer_id: string | null
+          customer_location: string | null
+          customer_name: string
+          customer_phone: string
           id: string
-          language: string | null
-          media_type: string | null
-          overview: string | null
-          poster_file_size: number | null
-          poster_url: string | null
-          rating: number | null
-          release_date: string | null
-          revenue: number | null
-          status: string | null
-          title: string
-          updated_at: string | null
-          uploaded_by: string
-          video_file_format: string | null
-          video_file_size: number | null
-          video_url: string
-        }
-        Insert: {
-          backdrop_file_size?: number | null
-          backdrop_url?: string | null
-          budget?: number | null
-          cast_members?: string[] | null
-          country?: string | null
-          created_at?: string | null
-          director?: string | null
-          duration?: number | null
-          genre_ids?: number[] | null
-          id?: string
-          language?: string | null
-          media_type?: string | null
-          overview?: string | null
-          poster_file_size?: number | null
-          poster_url?: string | null
-          rating?: number | null
-          release_date?: string | null
-          revenue?: number | null
-          status?: string | null
-          title: string
-          updated_at?: string | null
-          uploaded_by: string
-          video_file_format?: string | null
-          video_file_size?: number | null
-          video_url: string
-        }
-        Update: {
-          backdrop_file_size?: number | null
-          backdrop_url?: string | null
-          budget?: number | null
-          cast_members?: string[] | null
-          country?: string | null
-          created_at?: string | null
-          director?: string | null
-          duration?: number | null
-          genre_ids?: number[] | null
-          id?: string
-          language?: string | null
-          media_type?: string | null
-          overview?: string | null
-          poster_file_size?: number | null
-          poster_url?: string | null
-          rating?: number | null
-          release_date?: string | null
-          revenue?: number | null
-          status?: string | null
-          title?: string
-          updated_at?: string | null
-          uploaded_by?: string
-          video_file_format?: string | null
-          video_file_size?: number | null
-          video_url?: string
-        }
-        Relationships: []
-      }
-      user_activities: {
-        Row: {
-          activity_type: string
-          calories: number | null
-          created_at: string
-          duration: number
-          heart_rate: number | null
-          id: string
-          intensity: string
+          materials: Json | null
           notes: string | null
-          steps: number | null
-          user_id: string
+          owner_id: string
+          pattern_id: string | null
+          pdf_url: string | null
+          preset_id: string | null
+          profit: number
+          quote_number: string
+          rate_per_m2: number | null
+          status: Database["public"]["Enums"]["quote_status"]
+          style_id: string | null
+          subtotal: number
+          total_cost: number
+          updated_at: string
+          work_mode: string
         }
         Insert: {
-          activity_type: string
-          calories?: number | null
+          area_m2: number
           created_at?: string
-          duration: number
-          heart_rate?: number | null
+          customer_id?: string | null
+          customer_location?: string | null
+          customer_name: string
+          customer_phone: string
           id?: string
-          intensity: string
+          materials?: Json | null
           notes?: string | null
-          steps?: number | null
-          user_id: string
+          owner_id: string
+          pattern_id?: string | null
+          pdf_url?: string | null
+          preset_id?: string | null
+          profit?: number
+          quote_number: string
+          rate_per_m2?: number | null
+          status?: Database["public"]["Enums"]["quote_status"]
+          style_id?: string | null
+          subtotal?: number
+          total_cost?: number
+          updated_at?: string
+          work_mode: string
         }
         Update: {
-          activity_type?: string
-          calories?: number | null
+          area_m2?: number
           created_at?: string
-          duration?: number
-          heart_rate?: number | null
+          customer_id?: string | null
+          customer_location?: string | null
+          customer_name?: string
+          customer_phone?: string
           id?: string
-          intensity?: string
+          materials?: Json | null
           notes?: string | null
-          steps?: number | null
-          user_id?: string
+          owner_id?: string
+          pattern_id?: string | null
+          pdf_url?: string | null
+          preset_id?: string | null
+          profit?: number
+          quote_number?: string
+          rate_per_m2?: number | null
+          status?: Database["public"]["Enums"]["quote_status"]
+          style_id?: string | null
+          subtotal?: number
+          total_cost?: number
+          updated_at?: string
+          work_mode?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "quotations_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quotations_preset_id_fkey"
+            columns: ["preset_id"]
+            isOneToOne: false
+            referencedRelation: "pricing_presets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
-      user_preferences: {
+      quote_counters: {
         Row: {
-          allow_downloads: boolean | null
-          id: string
-          language: string | null
-          max_rating: string | null
-          parental_control_enabled: boolean | null
-          user_id: string
+          last_seq: number
+          year: number
         }
         Insert: {
-          allow_downloads?: boolean | null
-          id?: string
-          language?: string | null
-          max_rating?: string | null
-          parental_control_enabled?: boolean | null
-          user_id: string
+          last_seq?: number
+          year: number
         }
         Update: {
-          allow_downloads?: boolean | null
-          id?: string
-          language?: string | null
-          max_rating?: string | null
-          parental_control_enabled?: boolean | null
-          user_id?: string
+          last_seq?: number
+          year?: number
         }
         Relationships: []
       }
       user_roles: {
         Row: {
-          created_at: string | null
-          id: string
-          role: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          role: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          role?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      user_shorts_interactions: {
-        Row: {
           created_at: string
           id: string
-          interaction_type: Database["public"]["Enums"]["shorts_interaction_type"]
-          movie_id: number
+          role: Database["public"]["Enums"]["app_role"]
           user_id: string
-          video_key: string
-          watch_duration_seconds: number | null
         }
         Insert: {
           created_at?: string
           id?: string
-          interaction_type: Database["public"]["Enums"]["shorts_interaction_type"]
-          movie_id: number
+          role: Database["public"]["Enums"]["app_role"]
           user_id: string
-          video_key: string
-          watch_duration_seconds?: number | null
         }
         Update: {
           created_at?: string
           id?: string
-          interaction_type?: Database["public"]["Enums"]["shorts_interaction_type"]
-          movie_id?: number
+          role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
-          video_key?: string
-          watch_duration_seconds?: number | null
         }
         Relationships: []
-      }
-      user_watchlist: {
-        Row: {
-          created_at: string | null
-          id: string
-          movie_id: number
-          title: string | null
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          movie_id: number
-          title?: string | null
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          movie_id?: number
-          title?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "user_watchlist_movie_id_fkey"
-            columns: ["movie_id"]
-            isOneToOne: false
-            referencedRelation: "movies"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      viewing_history: {
-        Row: {
-          completed: boolean | null
-          id: string
-          movie_id: number
-          user_id: string
-          watch_duration: number | null
-          watched_at: string | null
-        }
-        Insert: {
-          completed?: boolean | null
-          id?: string
-          movie_id: number
-          user_id: string
-          watch_duration?: number | null
-          watched_at?: string | null
-        }
-        Update: {
-          completed?: boolean | null
-          id?: string
-          movie_id?: number
-          user_id?: string
-          watch_duration?: number | null
-          watched_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "viewing_history_movie_id_fkey"
-            columns: ["movie_id"]
-            isOneToOne: false
-            referencedRelation: "movies"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      watch_list: {
-        Row: {
-          created_at: string | null
-          id: number
-          movie_title: string
-          updated_at: string | null
-          user_id: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          id?: never
-          movie_title: string
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          id?: never
-          movie_title?: string
-          updated_at?: string | null
-          user_id?: string | null
-        }
-        Relationships: []
-      }
-      watch_parties: {
-        Row: {
-          created_at: string | null
-          description: string | null
-          host_id: string
-          id: string
-          is_public: boolean | null
-          movie_id: number
-          party_name: string
-          scheduled_time: string
-        }
-        Insert: {
-          created_at?: string | null
-          description?: string | null
-          host_id: string
-          id?: string
-          is_public?: boolean | null
-          movie_id: number
-          party_name: string
-          scheduled_time: string
-        }
-        Update: {
-          created_at?: string | null
-          description?: string | null
-          host_id?: string
-          id?: string
-          is_public?: boolean | null
-          movie_id?: number
-          party_name?: string
-          scheduled_time?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "watch_parties_movie_id_fkey"
-            columns: ["movie_id"]
-            isOneToOne: false
-            referencedRelation: "movies"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      watch_party_members: {
-        Row: {
-          id: string
-          joined_at: string | null
-          party_id: string
-          user_id: string
-        }
-        Insert: {
-          id?: string
-          joined_at?: string | null
-          party_id: string
-          user_id: string
-        }
-        Update: {
-          id?: string
-          joined_at?: string | null
-          party_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "watch_party_members_party_id_fkey"
-            columns: ["party_id"]
-            isOneToOne: false
-            referencedRelation: "watch_parties"
-            referencedColumns: ["id"]
-          },
-        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      get_user_admin_data: {
-        Args: Record<PropertyKey, never>
-        Returns: {
-          user_id: string
-          email: string
-          role: string
-          subscription: string
-          join_date: string
-          last_active: string
-        }[]
-      }
-      init_highscores_table: {
-        Args: Record<PropertyKey, never>
-        Returns: undefined
-      }
-      is_admin: {
-        Args: { user_id?: string }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
         Returns: boolean
       }
+      next_quote_number: { Args: never; Returns: string }
     }
     Enums: {
-      shorts_interaction_type: "like" | "view" | "skip" | "complete"
+      app_role: "admin" | "user"
+      quote_status:
+        | "draft"
+        | "sent"
+        | "approved"
+        | "rejected"
+        | "completed"
+        | "archived"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -922,7 +436,15 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      shorts_interaction_type: ["like", "view", "skip", "complete"],
+      app_role: ["admin", "user"],
+      quote_status: [
+        "draft",
+        "sent",
+        "approved",
+        "rejected",
+        "completed",
+        "archived",
+      ],
     },
   },
 } as const
