@@ -19,7 +19,7 @@ const Auth = () => {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const redirectTo = params.get('next') || '/admin';
+  const redirectTo = params.get('next') || '/dashboard';
 
   useEffect(() => {
     if (session) navigate(redirectTo, { replace: true });
