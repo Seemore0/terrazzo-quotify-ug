@@ -58,29 +58,72 @@ export const useUpdateQuotationStatus = () => {
   });
 };
 
+export const useUpdateQuotation = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: Partial<QuotationInsert> }) => {
+      const { data, error } = await supabase.from('quotations').update(patch).eq('id', id).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['quotations'] });
+      qc.invalidateQueries({ queryKey: ['quotation'] });
+    },
+  });
+};
+
+export const useDuplicateQuotation = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string): Promise<Quotation> => {
+      const { data: src, error: e1 } = await supabase.from('quotations').select('*').eq('id', id).single();
+      if (e1) throw e1;
+      const { id: _id, quote_number: _qn, created_at: _c, updated_at: _u, ...rest } = src;
+      const { data, error } = await supabase.from('quotations')
+        .insert({ ...rest, status: 'draft' } as any).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['quotations'] }),
+  });
+};
+
 export const useDashboardStats = () => useQuery({
   queryKey: ['dashboard-stats'],
   queryFn: async () => {
-    const { data: quotes } = await supabase.from('quotations').select('total_cost, status, created_at');
+    const { data: quotes } = await supabase.from('quotations').select('total_cost, status, created_at, quote_number, customer_name, id');
     const list = quotes ?? [];
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthQuotes = list.filter(q => new Date(q.created_at) >= monthStart);
     const completed = list.filter(q => q.status === 'completed');
     const revenue = completed.reduce((s, q) => s + Number(q.total_cost || 0), 0);
-    const pipeline = list.filter(q => ['draft','sent','approved'].includes(q.status))
+    const activeProjects = list.filter(q => q.status === 'in_progress').length;
+    const pending = list.filter(q => ['draft','sent'].includes(q.status)).length;
+    const pipeline = list.filter(q => ['draft','sent','approved','in_progress'].includes(q.status))
       .reduce((s, q) => s + Number(q.total_cost || 0), 0);
 
-    // Monthly revenue for last 6 months
-    const monthly: { month: string; revenue: number }[] = [];
+    // Monthly revenue + quote count for last 6 months
+    const monthly: { month: string; revenue: number; quotes: number }[] = [];
     for (let i = 5; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       const nd = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
-      const rev = completed
-        .filter(q => { const c = new Date(q.created_at); return c >= d && c < nd; })
+      const inRange = list.filter(q => { const c = new Date(q.created_at); return c >= d && c < nd; });
+      const rev = inRange.filter(q => q.status === 'completed')
         .reduce((s, q) => s + Number(q.total_cost || 0), 0);
-      monthly.push({ month: d.toLocaleDateString('en-UG', { month: 'short' }), revenue: rev });
+      monthly.push({ month: d.toLocaleDateString('en-UG', { month: 'short' }), revenue: rev, quotes: inRange.length });
     }
+
+    // Status distribution
+    const statusMap: Record<string, number> = {};
+    list.forEach(q => { statusMap[q.status] = (statusMap[q.status] ?? 0) + 1; });
+    const statusDist = Object.entries(statusMap).map(([status, count]) => ({ status, count }));
+
+    // Recent quotations (5 latest)
+    const recent = [...list]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 5);
 
     const { count: customersCount } = await supabase
       .from('customers').select('*', { count: 'exact', head: true }).eq('archived', false);
@@ -91,7 +134,12 @@ export const useDashboardStats = () => useQuery({
       revenue,
       pipeline,
       customers: customersCount ?? 0,
+      activeProjects,
+      pending,
+      completedCount: completed.length,
       monthly,
+      statusDist,
+      recent,
     };
   },
 });

@@ -10,6 +10,7 @@ import { Search, Plus, Users, Phone, MapPin, Trash2, MessageCircle } from 'lucid
 import { customerSchema } from '@/lib/schemas';
 import { toast } from 'sonner';
 import { buildWhatsAppUrl } from '@/lib/whatsapp';
+import { Link } from 'react-router-dom';
 
 const emptyForm = { name: '', phone: '', email: '', location: '', notes: '' };
 
@@ -91,7 +92,7 @@ const Customers = () => {
           <Card key={c.id} className="p-4 space-y-2">
             <div className="flex items-start justify-between">
               <div className="min-w-0 flex-1">
-                <div className="font-semibold truncate">{c.name}</div>
+                <Link to={`/customers/${c.id}`} className="font-semibold truncate hover:text-primary hover:underline block">{c.name}</Link>
                 <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                   <Phone className="h-3 w-3" /> {c.phone}
                 </div>
