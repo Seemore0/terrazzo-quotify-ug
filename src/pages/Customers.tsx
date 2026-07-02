@@ -10,6 +10,7 @@ import { Search, Plus, Users, Phone, MapPin, Trash2, MessageCircle } from 'lucid
 import { customerSchema } from '@/lib/schemas';
 import { toast } from 'sonner';
 import { buildWhatsAppUrl } from '@/lib/whatsapp';
+import { Link } from 'react-router-dom';
 
 const emptyForm = { name: '', phone: '', email: '', location: '', notes: '' };
 
