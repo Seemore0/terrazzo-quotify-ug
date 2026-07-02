@@ -307,6 +307,7 @@ export type Database = {
         | "sent"
         | "approved"
         | "rejected"
+        | "in_progress"
         | "completed"
         | "archived"
     }
@@ -442,6 +443,7 @@ export const Constants = {
         "sent",
         "approved",
         "rejected",
+        "in_progress",
         "completed",
         "archived",
       ],
