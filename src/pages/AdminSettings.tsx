@@ -21,6 +21,7 @@ const AdminSettings = () => {
 
   const [draft, setDraft] = useState<PresetConfig>(activePreset.config);
   const [saving, setSaving] = useState(false);
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(activePreset.config);
 
   // Reset draft whenever the active preset changes
   useEffect(() => { setDraft(structuredClone(activePreset.config)); }, [activePreset.id, activePreset.config]);
