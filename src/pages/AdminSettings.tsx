@@ -21,6 +21,7 @@ const AdminSettings = () => {
 
   const [draft, setDraft] = useState<PresetConfig>(activePreset.config);
   const [saving, setSaving] = useState(false);
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(activePreset.config);
 
   // Reset draft whenever the active preset changes
   useEffect(() => { setDraft(structuredClone(activePreset.config)); }, [activePreset.id, activePreset.config]);
@@ -45,25 +46,25 @@ const AdminSettings = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-24 md:pb-8">
       <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/')}>
+          <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+            <Button variant="ghost" size="icon" onClick={() => navigate('/')} className="shrink-0">
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div>
-              <h1 className="text-2xl font-bold flex items-center gap-2">
-                <Settings className="h-6 w-6 text-primary" />
+            <div className="min-w-0">
+              <h1 className="text-lg md:text-2xl font-bold flex items-center gap-2 truncate">
+                <Settings className="h-5 w-5 md:h-6 md:w-6 text-primary shrink-0" />
                 Admin Settings
               </h1>
-              <p className="text-sm text-muted-foreground">Manage pricing presets, styles, patterns, materials & formulas</p>
+              <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">Manage pricing presets, styles, patterns, materials & formulas</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 shrink-0">
             <Button variant="outline" size="sm" onClick={() => { signOut(); navigate('/'); }}>
-              <LogOut className="h-4 w-4 mr-1" /> Sign out
+              <LogOut className="h-4 w-4 sm:mr-1" /> <span className="hidden sm:inline">Sign out</span>
             </Button>
           </div>
         </div>
@@ -102,24 +103,31 @@ const AdminSettings = () => {
 
         {/* Editor tabs */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-3">
-            <div>
-              <CardTitle>{activePreset.name}</CardTitle>
-              <CardDescription>Edit-in-place. Click "Save changes" to persist.</CardDescription>
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="min-w-0">
+              <CardTitle className="text-lg md:text-2xl truncate">{activePreset.name}</CardTitle>
+              <CardDescription className="text-xs md:text-sm">Edit-in-place. Click "Save changes" to persist.</CardDescription>
             </div>
-            <Button onClick={handleSave} disabled={!canSave || saving} className="gap-2">
+            <Button
+              onClick={handleSave}
+              disabled={!canSave || saving || !isDirty}
+              size="sm"
+              className="gap-2 hidden sm:inline-flex self-start sm:self-auto"
+            >
               <Save className="h-4 w-4" /> {saving ? 'Saving…' : 'Save changes'}
             </Button>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 sm:px-6">
             <Tabs defaultValue="styles" className="w-full">
-              <TabsList className="grid grid-cols-2 sm:grid-cols-5 w-full">
-                <TabsTrigger value="styles">Styles</TabsTrigger>
-                <TabsTrigger value="patterns">Patterns</TabsTrigger>
-                <TabsTrigger value="prices-c">Casting Prices</TabsTrigger>
-                <TabsTrigger value="prices-g">Grinding Prices</TabsTrigger>
-                <TabsTrigger value="formulas">Formulas</TabsTrigger>
-              </TabsList>
+              <div className="-mx-3 sm:mx-0 overflow-x-auto scrollbar-none">
+                <TabsList className="inline-flex sm:grid sm:grid-cols-5 w-max sm:w-full min-w-full px-3 sm:px-0 gap-1">
+                  <TabsTrigger value="styles" className="shrink-0">Styles</TabsTrigger>
+                  <TabsTrigger value="patterns" className="shrink-0">Patterns</TabsTrigger>
+                  <TabsTrigger value="prices-c" className="shrink-0">Casting Prices</TabsTrigger>
+                  <TabsTrigger value="prices-g" className="shrink-0">Grinding Prices</TabsTrigger>
+                  <TabsTrigger value="formulas" className="shrink-0">Formulas</TabsTrigger>
+                </TabsList>
+              </div>
 
               <TabsContent value="styles" className="pt-4">
                 <StylesEditor rows={draft.styles} onChange={(rows) => setDraft({ ...draft, styles: rows })} />
@@ -173,6 +181,15 @@ const AdminSettings = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Mobile sticky save bar (only when dirty) */}
+      {canSave && isDirty && (
+        <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t bg-background/95 backdrop-blur p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-lg">
+          <Button onClick={handleSave} disabled={saving} className="w-full gap-2 h-11">
+            <Save className="h-4 w-4" /> {saving ? 'Saving…' : 'Save changes'}
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
