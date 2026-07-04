@@ -102,24 +102,31 @@ const AdminSettings = () => {
 
         {/* Editor tabs */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-3">
-            <div>
-              <CardTitle>{activePreset.name}</CardTitle>
-              <CardDescription>Edit-in-place. Click "Save changes" to persist.</CardDescription>
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="min-w-0">
+              <CardTitle className="text-lg md:text-2xl truncate">{activePreset.name}</CardTitle>
+              <CardDescription className="text-xs md:text-sm">Edit-in-place. Click "Save changes" to persist.</CardDescription>
             </div>
-            <Button onClick={handleSave} disabled={!canSave || saving} className="gap-2">
+            <Button
+              onClick={handleSave}
+              disabled={!canSave || saving || !isDirty}
+              size="sm"
+              className="gap-2 hidden sm:inline-flex self-start sm:self-auto"
+            >
               <Save className="h-4 w-4" /> {saving ? 'Saving…' : 'Save changes'}
             </Button>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-3 sm:px-6">
             <Tabs defaultValue="styles" className="w-full">
-              <TabsList className="grid grid-cols-2 sm:grid-cols-5 w-full">
-                <TabsTrigger value="styles">Styles</TabsTrigger>
-                <TabsTrigger value="patterns">Patterns</TabsTrigger>
-                <TabsTrigger value="prices-c">Casting Prices</TabsTrigger>
-                <TabsTrigger value="prices-g">Grinding Prices</TabsTrigger>
-                <TabsTrigger value="formulas">Formulas</TabsTrigger>
-              </TabsList>
+              <div className="-mx-3 sm:mx-0 overflow-x-auto scrollbar-none">
+                <TabsList className="inline-flex sm:grid sm:grid-cols-5 w-max sm:w-full min-w-full px-3 sm:px-0 gap-1">
+                  <TabsTrigger value="styles" className="shrink-0">Styles</TabsTrigger>
+                  <TabsTrigger value="patterns" className="shrink-0">Patterns</TabsTrigger>
+                  <TabsTrigger value="prices-c" className="shrink-0">Casting Prices</TabsTrigger>
+                  <TabsTrigger value="prices-g" className="shrink-0">Grinding Prices</TabsTrigger>
+                  <TabsTrigger value="formulas" className="shrink-0">Formulas</TabsTrigger>
+                </TabsList>
+              </div>
 
               <TabsContent value="styles" className="pt-4">
                 <StylesEditor rows={draft.styles} onChange={(rows) => setDraft({ ...draft, styles: rows })} />
@@ -173,6 +180,15 @@ const AdminSettings = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Mobile sticky save bar (only when dirty) */}
+      {canSave && isDirty && (
+        <div className="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t bg-background/95 backdrop-blur p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-lg">
+          <Button onClick={handleSave} disabled={saving} className="w-full gap-2 h-11">
+            <Save className="h-4 w-4" /> {saving ? 'Saving…' : 'Save changes'}
+          </Button>
+        </div>
+      )}
     </div>
   );
 };
