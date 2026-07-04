@@ -1,9 +1,11 @@
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Plus, Trash2 } from 'lucide-react';
 import type { StyleRow } from '@/lib/presetTypes';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface Props {
   rows: StyleRow[];
@@ -11,6 +13,7 @@ interface Props {
 }
 
 export const StylesEditor = ({ rows, onChange }: Props) => {
+  const isMobile = useIsMobile();
   const update = (i: number, patch: Partial<StyleRow>) =>
     onChange(rows.map((r, idx) => idx === i ? { ...r, ...patch } : r));
   const remove = (i: number) => onChange(rows.filter((_, idx) => idx !== i));
@@ -23,6 +26,54 @@ export const StylesEditor = ({ rows, onChange }: Props) => {
     active: true,
     sort: rows.length,
   }]);
+
+  if (isMobile) {
+    return (
+      <div className="space-y-3">
+        {rows.length === 0 && (
+          <div className="text-center text-muted-foreground py-6 border rounded-lg">
+            No styles. Add one to get started.
+          </div>
+        )}
+        {rows.map((r, i) => (
+          <div key={r.id} className="border rounded-lg p-4 space-y-3 bg-card">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 space-y-1">
+                <Label className="text-xs text-muted-foreground">Name</Label>
+                <Input value={r.name} onChange={e => update(i, { name: e.target.value })} />
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => remove(i)} className="text-destructive shrink-0 mt-5">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Description</Label>
+              <Input value={r.description} onChange={e => update(i, { description: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Materials/m²</Label>
+                <Input type="number" inputMode="numeric" value={r.materialsRate}
+                  onChange={e => update(i, { materialsRate: parseInt(e.target.value) || 0 })} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Labour/m²</Label>
+                <Input type="number" inputMode="numeric" value={r.labourRate}
+                  onChange={e => update(i, { labourRate: parseInt(e.target.value) || 0 })} />
+              </div>
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t">
+              <Label className="text-sm">Active</Label>
+              <Switch checked={r.active} onCheckedChange={(v) => update(i, { active: v })} />
+            </div>
+          </div>
+        ))}
+        <Button variant="outline" size="sm" onClick={add} className="w-full">
+          <Plus className="h-4 w-4 mr-1" /> Add style
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
