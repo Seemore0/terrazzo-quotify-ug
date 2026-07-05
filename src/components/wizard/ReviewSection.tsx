@@ -66,8 +66,7 @@ export const ReviewSection = ({ client, floor, skirting, extras, notes }: Props)
       grinding: grindingRows,
       materialsTotal: t.materialsTotal,
       // Extended fields for sectioned summary:
-      // @ts-expect-error extras handled by pdf sectioned block
-      sectioned: {
+      // Extended fields for sectioned summary:
         floor: {
           area_m2: t.floorArea, thickness_mm: floor.thickness_mm, colour: floor.colour,
           styleName: floorStyle?.name, patternName: floorPattern?.name,
