@@ -22,7 +22,7 @@ export interface QuotationSection {
   sort: number;
 }
 
-export type SectionInsert = Omit<QuotationSection, 'id' | 'owner_id'>;
+export type SectionInsert = Omit<QuotationSection, 'id' | 'owner_id' | 'quote_id'>;
 
 export const useQuotationSections = (quoteId: string | undefined) => useQuery({
   queryKey: ['quotation-sections', quoteId],
