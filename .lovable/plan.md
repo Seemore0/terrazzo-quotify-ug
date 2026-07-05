@@ -1,70 +1,144 @@
-## Goal
-Transform the existing Terrazzo Quotation app into a production SaaS for Ugandan contractors with full CRM, quotation history, analytics, PDF/WhatsApp/email sharing, audit trails, PWA support, and hardened security.
+# Terrazzo Quotation Engine v2 — Multi-Section + Custom Mixes
 
-## Prerequisite (blocker)
-Backend work (quotations table, customers, audit trail, RLS, edge functions for email/PDF storage) requires a live database. The project is currently wired to an external Supabase project (`tlzrmbedscmnmuzhfwkh`) that I cannot run migrations against. Two options:
+Replaces the current 5-step wizard with a new multi-section flow while keeping the existing calculation, PDF, and DB compatible for old records.
 
-- **A. Enable Lovable Cloud** — I can run all migrations and deploy edge functions directly. Requires topping up credits (previously blocked). Existing `pricing_presets` data won't carry over, but nothing was actually created there yet.
-- **B. Keep external Supabase** — I write all SQL into `db/` files; you paste each file into the Supabase SQL editor. Edge functions you'd deploy via Supabase CLI.
+## What we're building
 
-I'll assume **A (Lovable Cloud)** for the plan. Tell me if you want B.
+1. **Two-section quotes** — every new quote has a Main Floor section and an optional Skirting section, each with its own dimensions, style, pattern, colour, and material mix.
+2. **Quantity-only custom mixes** — bags / kg entered directly for Stones (white/black/red/other), Cement (white/OPC), Oxides (black/red/yellow/green/blue/other), plus wooden strips and other materials.
+3. **Mix presets library** — built-in defaults + per-user saved mixes, loadable into any section.
+4. **One labour calculation** across combined area, using existing labour rate logic.
+5. **Professional PDF** with separated Floor / Skirting breakdowns and combined totals.
+6. **Backward compatible** — existing quotations continue to display and calculate using the current single-section engine.
 
-## Build phases
+## New wizard flow (replaces current 5 steps)
 
-### Phase 1 — Database schema (migrations)
-- `customers` (id, name, phone UNIQUE, email, location, total_projects, total_spent, last_project_date, owner_id, timestamps)
-- `quotations` (id, quote_number UNIQUE, customer_id FK, snapshot of customer fields, area_m2, floor_type, thickness, materials_json, total_cost, profit, status enum [draft|sent|approved|rejected|completed|archived], pdf_url, owner_id, timestamps)
-- `quote_counters` (year int PK, last_seq int) + `next_quote_number(year)` SECURITY DEFINER fn → `TQ-YYYY-####`, unique even after delete
-- `price_history` (material_name, old_price, new_price, changed_by, changed_at)
-- `user_roles` + `app_role` enum + `has_role()` (admin-only pricing edits)
-- RLS on every table; GRANTs per Lovable rules; triggers to maintain customer aggregates and log price changes
+```text
+1. Client & Project    Name, phone, location, notes
+2. Main Floor          Area (m² or ft²), thickness, style, pattern, colour, mix editor
+3. Skirting (optional) Height (mm) × wall length (m) → area, or manual area,
+                       style, pattern, colour, mix editor
+4. Labour & Extras     Work mode, transport, profit %, notes
+                       (labour rate × (floor area + skirting area))
+5. Review & Generate   Combined summary, PDF, WhatsApp, save
+```
 
-### Phase 2 — Data layer & hooks
-- `useQuotations`, `useCustomers`, `useDashboardStats`, `usePriceHistory` (React Query)
-- Migrate `presetContext` to use Supabase reads, keep localStorage fallback for offline
+A "Skip skirting" toggle keeps step 3 optional. Each section has a **Load preset** / **Save as preset** button next to the mix editor.
 
-### Phase 3 — Pages & navigation
-- App shell with sidebar: Dashboard / Quotes / Customers / Reports / Settings
-- `/dashboard` — stat cards + monthly revenue chart (recharts)
-- `/quotes` — list, filters (status/date/customer), search, actions (view/edit/duplicate/PDF/archive)
-- `/quotes/:id` — detail + edit
-- `/customers` — list + search
-- `/customers/:id` — profile, quote history, "New quote" CTA
-- `/reports` — exports (JSON/Excel via xlsx)
-- `/settings` — existing admin tabs + price history audit log
-- Global search command palette (cmd+k) over customers/quotes/phones/quote#s
+## Mix editor (Quantity mode)
 
-### Phase 4 — Quotation wizard upgrades
-- On submit: create/find customer by phone, allocate quote_number, persist quotation
-- Status workflow buttons
-- Duplicate quote action
+Grouped inputs, all in bags/kg with running subtotal per group:
 
-### Phase 5 — PDF, WhatsApp, Email
-- Rewrite jsPDF template: logo, quote #, customer block, itemized materials table (autotable), subtotal/tax/total, admin-toggle profit section, T&Cs, signature, footer contacts
-- WhatsApp share: `https://wa.me/<phone>?text=<encoded summary + PDF link>`
-- Email: edge function using Lovable scaffolded auth/transactional email infra (`send-transactional-email`) with PDF stored in Supabase Storage `quotes` bucket → signed URL in email
+- Stones (bags): White, Black, Red, Other
+- Cement (bags): White, Ordinary Portland
+- Oxides (kg): Black, Red, Yellow, Green, Blue, Other
+- Other materials: Wooden strips, Stips, Nails, Soft brush (auto-suggested from area but editable)
 
-### Phase 6 — PWA + mobile
-- Manifest + icons (manifest-only first; offline path only if you confirm offline quotation creation is needed — that adds sync-queue complexity)
-- Mobile polish: sticky "Generate Quote" CTA, `inputMode="decimal"`, larger tap targets, skeleton loaders
+Validation: no negative values; oxide total ≤ reasonable cap (warn if > 2 kg/m²); at least one stone entry > 0.
 
-### Phase 7 — Security & validation
-- Zod schemas on every form
-- RLS verified via test queries
-- Admin role gating on `/settings` pricing tabs and price_history
-- Run security scan at the end
+## Database (new tables, existing untouched)
+
+- `quotation_sections` — one row per section (`floor` | `skirting`) of a quote:
+  - `quote_id`, `kind`, `area_m2`, `height_mm`, `wall_length_m`, `thickness_mm`,
+    `style_id`, `pattern_id`, `colour`, `rate_per_m2`, `materials_cost`,
+    `mix_jsonb` (all quantities), `sort`
+- `mix_presets` — reusable mixes:
+  - `owner_id` (nullable → built-in), `name`, `kind` (`floor` | `skirting` | `any`),
+    `mix_jsonb`, `is_builtin`
+- RLS: sections inherit access from parent quote (owner_id via join policy);
+  mix_presets readable when `is_builtin OR owner_id = auth.uid()`, writable only by owner.
+- Seed 5 built-ins: Pure White, Black & White, Red Decorative, Hospital White, School Standard.
+
+`quotations` table gets two optional columns for aggregate display without breaking old rows:
+- `has_sections` boolean default false
+- `transport_cost` numeric default 0, `profit_pct` numeric default 0
+
+Existing single-section quotes keep working through the current `materials`/`style_id`/`pattern_id` columns; new quotes set `has_sections = true` and read from `quotation_sections`.
+
+## Calculation
+
+```text
+floorArea      = section(floor).area_m2
+skirtingArea   = section(skirting).area_m2 or 0
+totalArea      = floorArea + skirtingArea
+
+floorMaterials    = sum(mix line items × unit prices)  ← from active preset prices
+skirtingMaterials = sum(mix line items × unit prices)
+
+labourCost   = totalArea × labourRate(style, pattern, workMode)
+transport    = user input
+profit       = (materials + labour + transport) × profit_pct / 100
+grandTotal   = materials + labour + transport + profit
+```
+
+Unit prices for stones/cement/oxides continue to come from the active pricing preset (`pricing_presets.config.materials`), so admin price edits still cascade.
+
+## PDF
+
+Extend `src/lib/pdf.ts` to render, when `has_sections`:
+
+```text
+MAIN FLOOR
+  Area: 42 m² · Thickness 40 mm · Style: Bold · Colour: Grey
+  Materials
+    - White stones ................. 10 bags × 15,000 = 150,000
+    - Black oxide .................. 2 kg  × 15,000 =  30,000
+    ...
+  Floor subtotal ................................... 620,000
+
+SKIRTING
+  Area: 6.5 m² (100 mm × 65 m) · Style: Bold · Colour: Grey
+  Materials
+    ...
+  Skirting subtotal ................................  95,000
+
+LABOUR (48.5 m² combined) ..........................  430,000
+Transport ..........................................   50,000
+Profit (15%) ....................................... 179,250
+GRAND TOTAL ....................................... 1,374,250
+```
+
+Old quotes fall back to the current single-table PDF.
+
+## Files
+
+**New**
+- `src/lib/mixTypes.ts` — mix schema, quantity types, validators
+- `src/lib/sectionCalc.ts` — section + combined totals
+- `src/components/wizard/FloorSection.tsx`
+- `src/components/wizard/SkirtingSection.tsx`
+- `src/components/wizard/LabourExtras.tsx`
+- `src/components/wizard/ReviewSection.tsx`
+- `src/components/mix/MixEditor.tsx`
+- `src/components/mix/MixPresetPicker.tsx`
+- `src/hooks/useQuotationSections.ts`
+- `src/hooks/useMixPresets.ts`
+- `supabase/migrations/*_sections_and_mixes.sql`
+
+**Edited**
+- `src/components/QuotationApp.tsx` — new step orchestration
+- `src/components/LiveSummary.tsx` — combined summary
+- `src/hooks/useQuotations.ts` — create with sections
+- `src/lib/pdf.ts` — sectioned layout with fallback
+- `src/lib/schemas.ts` — section + mix zod schemas
+- `src/pages/CustomerProfile.tsx`, `Quotes.tsx` — display combined totals
+
+**Untouched (backward compat)**
+- All existing quotation rows, admin pricing presets editors, dashboard queries.
 
 ## Technical notes
-- Stack stays: React 18 + Vite + Tailwind + shadcn + TanStack Query + jsPDF + jspdf-autotable + recharts + xlsx + zod
-- Quote number generation is atomic via Postgres function with row lock on `quote_counters`
-- Customer aggregates (total_projects/total_spent/last_project_date) maintained by trigger on quotations
-- Soft delete = `status='archived'`; list views exclude archived by default
-- Offline mode: defer unless explicitly requested — true offline-with-sync is a multi-day project on its own
 
-## Scope confirmations needed
-1. **Backend**: Lovable Cloud (A) or keep external Supabase (B)?
-2. **Offline PWA**: installable + works offline with sync queue (large effort) OR just installable home-screen app (fast)?
-3. **Email**: set up Lovable Emails (needs domain) or skip for now?
-4. **Logo**: do you have a logo file to use, or want me to generate a placeholder?
+- Sections stored as separate rows keeps queries simple and lets us later add multi-room quotes without another migration.
+- All mix values live inside `mix_jsonb` on each section — flexible, no per-material columns to migrate when the mix schema grows.
+- Zod schemas validate on the client, and a Postgres trigger on `quotation_sections` re-checks non-negative numbers and total-percentage bounds server-side.
+- Mobile: mix editor uses the existing card-style responsive pattern from the admin editors (`useIsMobile` split), sticky "Next" button on section steps.
 
-Once you confirm, I'll execute phases 1→7 in order, committing after each phase so you can preview progress.
+## Rollout order
+
+1. Migration (tables, RLS, GRANTs, built-in mix seeds).
+2. Types + calc utilities + zod.
+3. Mix editor + preset picker (isolated, testable).
+4. New wizard steps replacing current step components.
+5. PDF + save flow wiring.
+6. Read-path updates for lists / customer profile.
+7. Smoke test old quote view, new quote create, PDF, WhatsApp.
