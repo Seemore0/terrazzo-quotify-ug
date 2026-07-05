@@ -1,0 +1,115 @@
+// Custom material mix — quantity-based (bags / kg / pieces).
+// Each mix is a flat list of items grouped for display.
+
+export type MixGroup = 'stones' | 'cement' | 'oxides' | 'other';
+
+export interface MixItem {
+  /** Stable slug for defaults; free-form for user-added rows. */
+  key: string;
+  label: string;
+  group: MixGroup;
+  qty: number;
+  unit: string;      // 'bag' | 'kg' | 'each' | 'bundle' | 'box' | 'liter' | 'piece'
+  unitPrice: number; // UGX
+}
+
+export interface Mix {
+  items: MixItem[];
+}
+
+export interface MixValidationIssue {
+  key?: string;
+  message: string;
+  level: 'error' | 'warn';
+}
+
+/** Default catalog for the FLOOR section. Contractors edit qty & unit price. */
+export const defaultFloorMix = (): Mix => ({
+  items: [
+    { key: 'stones-white',   label: 'Stones — White',           group: 'stones', qty: 0, unit: 'bag',   unitPrice: 15000 },
+    { key: 'stones-black',   label: 'Stones — Black',           group: 'stones', qty: 0, unit: 'bag',   unitPrice: 13000 },
+    { key: 'stones-red',     label: 'Stones — Red',             group: 'stones', qty: 0, unit: 'bag',   unitPrice: 13000 },
+    { key: 'cement-white',   label: 'White cement',             group: 'cement', qty: 0, unit: 'bag',   unitPrice: 65000 },
+    { key: 'cement-opc',     label: 'Ordinary Portland cement', group: 'cement', qty: 0, unit: 'bag',   unitPrice: 33000 },
+    { key: 'oxide-black',    label: 'Oxide — Black',            group: 'oxides', qty: 0, unit: 'kg',    unitPrice: 15000 },
+    { key: 'oxide-red',      label: 'Oxide — Red',              group: 'oxides', qty: 0, unit: 'kg',    unitPrice: 15000 },
+    { key: 'oxide-yellow',   label: 'Oxide — Yellow',           group: 'oxides', qty: 0, unit: 'kg',    unitPrice: 18000 },
+    { key: 'oxide-green',    label: 'Oxide — Green',            group: 'oxides', qty: 0, unit: 'kg',    unitPrice: 20000 },
+    { key: 'oxide-blue',     label: 'Oxide — Blue',             group: 'oxides', qty: 0, unit: 'kg',    unitPrice: 22000 },
+    { key: 'wooden-strips',  label: 'Wooden strips',            group: 'other',  qty: 0, unit: 'each',  unitPrice: 1000  },
+    { key: 'stips',          label: 'Stips',                    group: 'other',  qty: 0, unit: 'bundle',unitPrice: 60000 },
+    { key: 'concrete-nails', label: 'Concrete nails',           group: 'other',  qty: 0, unit: 'box',   unitPrice: 5000  },
+    { key: 'soft-brush',     label: 'Soft brush',               group: 'other',  qty: 0, unit: 'each',  unitPrice: 12000 },
+  ],
+});
+
+/** Default catalog for the SKIRTING section (no wooden strips by default). */
+export const defaultSkirtingMix = (): Mix => ({
+  items: [
+    { key: 'stones-white',   label: 'Skirting stones — White', group: 'stones', qty: 0, unit: 'bag',   unitPrice: 15000 },
+    { key: 'stones-black',   label: 'Skirting stones — Black', group: 'stones', qty: 0, unit: 'bag',   unitPrice: 13000 },
+    { key: 'stones-red',     label: 'Skirting stones — Red',   group: 'stones', qty: 0, unit: 'bag',   unitPrice: 13000 },
+    { key: 'cement-white',   label: 'White cement',            group: 'cement', qty: 0, unit: 'bag',   unitPrice: 65000 },
+    { key: 'cement-opc',     label: 'Ordinary Portland cement',group: 'cement', qty: 0, unit: 'bag',   unitPrice: 33000 },
+    { key: 'oxide-black',    label: 'Oxide — Black',           group: 'oxides', qty: 0, unit: 'kg',    unitPrice: 15000 },
+    { key: 'oxide-red',      label: 'Oxide — Red',             group: 'oxides', qty: 0, unit: 'kg',    unitPrice: 15000 },
+    { key: 'oxide-yellow',   label: 'Oxide — Yellow',          group: 'oxides', qty: 0, unit: 'kg',    unitPrice: 18000 },
+  ],
+});
+
+/** Suggest starting quantities based on area (m²) — user can override. */
+export const suggestFloorQtys = (mix: Mix, area: number): Mix => ({
+  items: mix.items.map(it => {
+    switch (it.key) {
+      case 'stones-white':   return { ...it, qty: Math.ceil((area / 2) * (5/7)) };
+      case 'stones-black':   return { ...it, qty: Math.ceil((area / 2) * (2/7) * (14/24)) };
+      case 'stones-red':     return { ...it, qty: Math.ceil((area / 2) * (2/7) * (10/24)) };
+      case 'cement-white':   return { ...it, qty: Math.ceil(area / 8) };
+      case 'cement-opc':     return { ...it, qty: Math.ceil((area / 2) / 2) };
+      case 'wooden-strips':  return { ...it, qty: Math.ceil(area / 2.67) };
+      case 'stips':          return { ...it, qty: Math.ceil(area / 26.67) };
+      case 'concrete-nails': return { ...it, qty: Math.ceil(area / 26.67) };
+      case 'soft-brush':     return { ...it, qty: Math.ceil(area / 16) };
+      default: return it;
+    }
+  }),
+});
+
+export const suggestSkirtingQtys = (mix: Mix, area: number): Mix => ({
+  items: mix.items.map(it => {
+    switch (it.key) {
+      case 'stones-white':  return { ...it, qty: Math.ceil((area / 3.33) * (5/7)) };
+      case 'stones-black':  return { ...it, qty: Math.ceil((area / 3.33) * (2/7) * (11/24)) };
+      case 'stones-red':    return { ...it, qty: Math.ceil((area / 3.33) * (2/7) * (4/24)) };
+      case 'cement-white':  return { ...it, qty: Math.ceil(area / 10) };
+      case 'cement-opc':    return { ...it, qty: Math.ceil((area / 3.33) / 2) };
+      default: return it;
+    }
+  }),
+});
+
+export const mixTotal = (mix: Mix): number =>
+  mix.items.reduce((s, it) => s + (Math.max(0, it.qty) * Math.max(0, it.unitPrice)), 0);
+
+export const validateMix = (mix: Mix, area: number): MixValidationIssue[] => {
+  const issues: MixValidationIssue[] = [];
+  mix.items.forEach(it => {
+    if (it.qty < 0)       issues.push({ key: it.key, level: 'error', message: `${it.label}: quantity cannot be negative` });
+    if (it.unitPrice < 0) issues.push({ key: it.key, level: 'error', message: `${it.label}: unit price cannot be negative` });
+  });
+  const stones = mix.items.filter(i => i.group === 'stones').reduce((s, i) => s + i.qty, 0);
+  if (stones <= 0) issues.push({ level: 'warn', message: 'No stones added — most terrazzo mixes need at least one stone.' });
+  const oxides = mix.items.filter(i => i.group === 'oxides').reduce((s, i) => s + i.qty, 0);
+  if (area > 0 && oxides / area > 2) issues.push({ level: 'warn', message: 'Oxide load exceeds 2 kg/m² — please double-check.' });
+  return issues;
+};
+
+export const cloneMix = (mix: Mix): Mix => ({ items: mix.items.map(i => ({ ...i })) });
+
+/** Skirting area from height (mm) and total wall length (m). */
+export const skirtingAreaFromDims = (heightMm: number, wallLengthM: number): number => {
+  if (!heightMm || !wallLengthM) return 0;
+  return +((heightMm / 1000) * wallLengthM).toFixed(3);
+};
+
+export const ftToM2 = (areaFt2: number): number => +(areaFt2 * 0.0929).toFixed(3);
