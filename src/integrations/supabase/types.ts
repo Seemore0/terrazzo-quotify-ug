@@ -62,6 +62,39 @@ export type Database = {
         }
         Relationships: []
       }
+      mix_presets: {
+        Row: {
+          created_at: string
+          id: string
+          is_builtin: boolean
+          kind: Database["public"]["Enums"]["mix_preset_kind"]
+          mix: Json
+          name: string
+          owner_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_builtin?: boolean
+          kind?: Database["public"]["Enums"]["mix_preset_kind"]
+          mix?: Json
+          name: string
+          owner_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_builtin?: boolean
+          kind?: Database["public"]["Enums"]["mix_preset_kind"]
+          mix?: Json
+          name?: string
+          owner_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       price_history: {
         Row: {
           changed_at: string
@@ -160,6 +193,74 @@ export type Database = {
         }
         Relationships: []
       }
+      quotation_sections: {
+        Row: {
+          area_m2: number
+          colour: string | null
+          created_at: string
+          height_mm: number | null
+          id: string
+          kind: Database["public"]["Enums"]["section_kind"]
+          materials_cost: number
+          mix: Json
+          owner_id: string
+          pattern_id: string | null
+          quote_id: string
+          rate_per_m2: number
+          sort: number
+          style_id: string | null
+          thickness_mm: number | null
+          updated_at: string
+          wall_length_m: number | null
+        }
+        Insert: {
+          area_m2?: number
+          colour?: string | null
+          created_at?: string
+          height_mm?: number | null
+          id?: string
+          kind: Database["public"]["Enums"]["section_kind"]
+          materials_cost?: number
+          mix?: Json
+          owner_id: string
+          pattern_id?: string | null
+          quote_id: string
+          rate_per_m2?: number
+          sort?: number
+          style_id?: string | null
+          thickness_mm?: number | null
+          updated_at?: string
+          wall_length_m?: number | null
+        }
+        Update: {
+          area_m2?: number
+          colour?: string | null
+          created_at?: string
+          height_mm?: number | null
+          id?: string
+          kind?: Database["public"]["Enums"]["section_kind"]
+          materials_cost?: number
+          mix?: Json
+          owner_id?: string
+          pattern_id?: string | null
+          quote_id?: string
+          rate_per_m2?: number
+          sort?: number
+          style_id?: string | null
+          thickness_mm?: number | null
+          updated_at?: string
+          wall_length_m?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quotation_sections_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quotations: {
         Row: {
           area_m2: number
@@ -168,6 +269,7 @@ export type Database = {
           customer_location: string | null
           customer_name: string
           customer_phone: string
+          has_sections: boolean
           id: string
           materials: Json | null
           notes: string | null
@@ -176,12 +278,14 @@ export type Database = {
           pdf_url: string | null
           preset_id: string | null
           profit: number
+          profit_pct: number
           quote_number: string
           rate_per_m2: number | null
           status: Database["public"]["Enums"]["quote_status"]
           style_id: string | null
           subtotal: number
           total_cost: number
+          transport_cost: number
           updated_at: string
           work_mode: string
         }
@@ -192,6 +296,7 @@ export type Database = {
           customer_location?: string | null
           customer_name: string
           customer_phone: string
+          has_sections?: boolean
           id?: string
           materials?: Json | null
           notes?: string | null
@@ -200,12 +305,14 @@ export type Database = {
           pdf_url?: string | null
           preset_id?: string | null
           profit?: number
+          profit_pct?: number
           quote_number: string
           rate_per_m2?: number | null
           status?: Database["public"]["Enums"]["quote_status"]
           style_id?: string | null
           subtotal?: number
           total_cost?: number
+          transport_cost?: number
           updated_at?: string
           work_mode: string
         }
@@ -216,6 +323,7 @@ export type Database = {
           customer_location?: string | null
           customer_name?: string
           customer_phone?: string
+          has_sections?: boolean
           id?: string
           materials?: Json | null
           notes?: string | null
@@ -224,12 +332,14 @@ export type Database = {
           pdf_url?: string | null
           preset_id?: string | null
           profit?: number
+          profit_pct?: number
           quote_number?: string
           rate_per_m2?: number | null
           status?: Database["public"]["Enums"]["quote_status"]
           style_id?: string | null
           subtotal?: number
           total_cost?: number
+          transport_cost?: number
           updated_at?: string
           work_mode?: string
         }
@@ -302,6 +412,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      mix_preset_kind: "floor" | "skirting" | "any"
       quote_status:
         | "draft"
         | "sent"
@@ -310,6 +421,7 @@ export type Database = {
         | "in_progress"
         | "completed"
         | "archived"
+      section_kind: "floor" | "skirting"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -438,6 +550,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      mix_preset_kind: ["floor", "skirting", "any"],
       quote_status: [
         "draft",
         "sent",
@@ -447,6 +560,7 @@ export const Constants = {
         "completed",
         "archived",
       ],
+      section_kind: ["floor", "skirting"],
     },
   },
 } as const
