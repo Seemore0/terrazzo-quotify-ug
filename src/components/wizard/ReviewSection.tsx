@@ -66,7 +66,7 @@ export const ReviewSection = ({ client, floor, skirting, extras, notes }: Props)
       grinding: grindingRows,
       materialsTotal: t.materialsTotal,
       // Extended fields for sectioned summary:
-      // Extended fields for sectioned summary:
+      sectioned: {
         floor: {
           area_m2: t.floorArea, thickness_mm: floor.thickness_mm, colour: floor.colour,
           styleName: floorStyle?.name, patternName: floorPattern?.name,
