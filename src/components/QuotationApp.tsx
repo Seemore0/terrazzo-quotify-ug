@@ -44,6 +44,7 @@ const QuotationApp = () => {
     style_id: defaultStyle, pattern_id: defaultPattern, colour: '',
     mix: defaultSkirtingMix(),
   });
+  const [grinding, setGrinding] = useState<Mix>(defaultGrindingMix());
   const [extras, setExtras] = useState<QuoteExtras>({ workMode: 'full', transportCost: 0, profitPct: 15 });
   const [notes, setNotes] = useState('');
 
