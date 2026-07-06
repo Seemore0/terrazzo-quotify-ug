@@ -11,6 +11,8 @@ export interface MixItem {
   qty: number;
   unit: string;      // 'bag' | 'kg' | 'each' | 'bundle' | 'box' | 'liter' | 'piece'
   unitPrice: number; // UGX
+  /** Only used by grinding: when false the row is excluded from totals & PDF. Undefined = true. */
+  enabled?: boolean;
 }
 
 export interface Mix {
