@@ -12,7 +12,7 @@ import { PresetSwitcher } from './admin/PresetSwitcher';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { usePresets } from '@/lib/presetContext';
-import { defaultFloorMix, defaultSkirtingMix } from '@/lib/mixTypes';
+import { defaultFloorMix, defaultSkirtingMix, defaultGrindingMix, type Mix } from '@/lib/mixTypes';
 import { type Section, type QuoteExtras } from '@/lib/sectionCalc';
 import { useNavigate } from 'react-router-dom';
 
