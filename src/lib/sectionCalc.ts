@@ -25,6 +25,8 @@ export interface CombinedTotals {
   totalArea: number;
   floorMaterials: number;
   skirtingMaterials: number;
+  castingMaterials: number;
+  grindingMaterials: number;
   materialsTotal: number;
   labourRate: number;
   labourCost: number;
@@ -38,7 +40,8 @@ export const combineTotals = (
   config: PresetConfig,
   floor: Section,
   skirting: Section | null,
-  extras: QuoteExtras
+  extras: QuoteExtras,
+  grinding: Mix | null = null
 ): CombinedTotals => {
   const floorArea = Math.max(0, floor.area_m2 || 0);
   const skirtingArea = skirting ? Math.max(0, skirting.area_m2 || 0) : 0;
@@ -46,14 +49,14 @@ export const combineTotals = (
 
   const floorMaterials = mixTotal(floor.mix);
   const skirtingMaterials = skirting ? mixTotal(skirting.mix) : 0;
+  const castingMaterials = floorMaterials + skirtingMaterials;
+  const grindingMaterials = grinding ? mixTotal(grinding) : 0;
 
   // Labour uses floor's style/pattern for rate (contractor's primary design) but combined area
-  const labourRate = calculateRate(config, floor.style_id, extras.workMode === 'materials' ? 'labour' : extras.workMode, floor.pattern_id);
-  // For labour-only cost regardless of mode, use pure labour rate
   const pureLabourRate = calculateRate(config, floor.style_id, 'labour', floor.pattern_id);
   const labourCost = pureLabourRate * totalArea;
 
-  const materialsTotal = floorMaterials + skirtingMaterials;
+  const materialsTotal = castingMaterials + grindingMaterials;
   const transport = Math.max(0, extras.transportCost || 0);
   const subtotalBeforeProfit = materialsTotal + labourCost + transport;
   const profit = subtotalBeforeProfit * (Math.max(0, extras.profitPct || 0) / 100);
@@ -61,7 +64,8 @@ export const combineTotals = (
 
   return {
     floorArea, skirtingArea, totalArea,
-    floorMaterials, skirtingMaterials, materialsTotal,
+    floorMaterials, skirtingMaterials,
+    castingMaterials, grindingMaterials, materialsTotal,
     labourRate: pureLabourRate, labourCost,
     transport, subtotalBeforeProfit, profit, grandTotal,
   };

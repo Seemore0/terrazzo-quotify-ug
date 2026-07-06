@@ -11,6 +11,8 @@ export interface MixItem {
   qty: number;
   unit: string;      // 'bag' | 'kg' | 'each' | 'bundle' | 'box' | 'liter' | 'piece'
   unitPrice: number; // UGX
+  /** Only used by grinding: when false the row is excluded from totals & PDF. Undefined = true. */
+  enabled?: boolean;
 }
 
 export interface Mix {
@@ -88,8 +90,52 @@ export const suggestSkirtingQtys = (mix: Mix, area: number): Mix => ({
   }),
 });
 
+export const mixEnabledItems = (mix: Mix): MixItem[] =>
+  mix.items.filter(i => i.enabled !== false);
+
 export const mixTotal = (mix: Mix): number =>
-  mix.items.reduce((s, it) => s + (Math.max(0, it.qty) * Math.max(0, it.unitPrice)), 0);
+  mixEnabledItems(mix).reduce((s, it) => s + (Math.max(0, it.qty) * Math.max(0, it.unitPrice)), 0);
+
+/** Default catalog for the GRINDING phase — all items disabled by default so users pick only what applies. */
+export const defaultGrindingMix = (): Mix => ({
+  items: [
+    { key: 'big-diamond',    label: 'Big machine diamond tools', group: 'other', qty: 0, unit: 'set',   unitPrice: 150000, enabled: false },
+    { key: 'grinder-diamond',label: 'Grinder diamond tools',     group: 'other', qty: 0, unit: 'piece', unitPrice: 60000,  enabled: false },
+    { key: 'pad-50',         label: 'Pads — 50 grit',            group: 'other', qty: 0, unit: 'pad',   unitPrice: 20000,  enabled: false },
+    { key: 'pad-100',        label: 'Pads — 100 grit',           group: 'other', qty: 0, unit: 'pad',   unitPrice: 20000,  enabled: false },
+    { key: 'pad-200',        label: 'Pads — 200 grit',           group: 'other', qty: 0, unit: 'pad',   unitPrice: 20000,  enabled: false },
+    { key: 'pad-300',        label: 'Pads — 300 grit',           group: 'other', qty: 0, unit: 'pad',   unitPrice: 20000,  enabled: false },
+    { key: 'pad-400',        label: 'Pads — 400 grit',           group: 'other', qty: 0, unit: 'pad',   unitPrice: 20000,  enabled: false },
+    { key: 'pad-500',        label: 'Pads — 500 grit',           group: 'other', qty: 0, unit: 'pad',   unitPrice: 20000,  enabled: false },
+    { key: 'pad-holder-g',   label: 'Grinder pad holder',        group: 'other', qty: 0, unit: 'each',  unitPrice: 15000,  enabled: false },
+    { key: 'pad-holder-m',   label: 'Machine pad holder',        group: 'other', qty: 0, unit: 'each',  unitPrice: 15000,  enabled: false },
+    { key: 'squeezer',       label: 'Squeezer',                  group: 'other', qty: 0, unit: 'each',  unitPrice: 10000,  enabled: false },
+    { key: 'polish',         label: 'Polish',                    group: 'other', qty: 0, unit: 'liter', unitPrice: 20000,  enabled: false },
+    { key: 'maintainer',     label: 'Maintainer',                group: 'other', qty: 0, unit: 'liter', unitPrice: 10000,  enabled: false },
+  ],
+});
+
+export const suggestGrindingQtys = (mix: Mix, area: number): Mix => ({
+  items: mix.items.map(it => {
+    const q = (v: number) => Math.max(1, Math.ceil(v));
+    switch (it.key) {
+      case 'big-diamond':     return { ...it, enabled: true, qty: q(area / 115) };
+      case 'grinder-diamond': return { ...it, enabled: true, qty: q(area / 115) };
+      case 'pad-50':          return { ...it, enabled: true, qty: q(area / 77)  };
+      case 'pad-100':
+      case 'pad-200':
+      case 'pad-300':
+      case 'pad-400':         return { ...it, enabled: true, qty: q(area / 115) };
+      case 'pad-500':         return { ...it, enabled: true, qty: q(area / 230) };
+      case 'pad-holder-g':
+      case 'pad-holder-m':    return { ...it, enabled: true, qty: q(area / 57.5) };
+      case 'squeezer':        return { ...it, enabled: true, qty: q(area / 76.7) };
+      case 'polish':          return { ...it, enabled: true, qty: +(area * 0.087).toFixed(2) };
+      case 'maintainer':      return { ...it, enabled: true, qty: +(area * 0.174).toFixed(2) };
+      default: return it;
+    }
+  }),
+});
 
 export const validateMix = (mix: Mix, area: number): MixValidationIssue[] => {
   const issues: MixValidationIssue[] = [];

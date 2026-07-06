@@ -12,7 +12,7 @@ import { PresetSwitcher } from './admin/PresetSwitcher';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { usePresets } from '@/lib/presetContext';
-import { defaultFloorMix, defaultSkirtingMix } from '@/lib/mixTypes';
+import { defaultFloorMix, defaultSkirtingMix, defaultGrindingMix, type Mix } from '@/lib/mixTypes';
 import { type Section, type QuoteExtras } from '@/lib/sectionCalc';
 import { useNavigate } from 'react-router-dom';
 
@@ -44,6 +44,7 @@ const QuotationApp = () => {
     style_id: defaultStyle, pattern_id: defaultPattern, colour: '',
     mix: defaultSkirtingMix(),
   });
+  const [grinding, setGrinding] = useState<Mix>(defaultGrindingMix());
   const [extras, setExtras] = useState<QuoteExtras>({ workMode: 'full', transportCost: 0, profitPct: 15 });
   const [notes, setNotes] = useState('');
 
@@ -108,10 +109,18 @@ const QuotationApp = () => {
         )}
         {step === 1 && <FloorSection section={floor} onChange={setFloor} />}
         {step === 2 && <SkirtingSection enabled={skirtingEnabled} onEnabledChange={setSkirtingEnabled} section={skirting} onChange={setSkirting} />}
-        {step === 3 && <LabourExtras extras={extras} onChange={setExtras} notes={notes} onNotesChange={setNotes} />}
+        {step === 3 && (
+          <LabourExtras
+            extras={extras} onChange={setExtras}
+            notes={notes} onNotesChange={setNotes}
+            grinding={grinding} onGrindingChange={setGrinding}
+            totalArea={(floor.area_m2 || 0) + (skirtingEnabled ? (skirting.area_m2 || 0) : 0)}
+          />
+        )}
         {step === 4 && (
           <ReviewSection client={client} floor={floor}
             skirting={skirtingEnabled ? skirting : null}
+            grinding={grinding}
             extras={extras} notes={notes} />
         )}
 

@@ -3,28 +3,42 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { WorkModeSelector } from '@/components/WorkModeSelector';
+import { GrindingEditor } from '@/components/mix/GrindingEditor';
 import { type QuoteExtras } from '@/lib/sectionCalc';
+import type { Mix } from '@/lib/mixTypes';
 
 interface Props {
   extras: QuoteExtras;
   onChange: (e: QuoteExtras) => void;
   notes: string;
   onNotesChange: (n: string) => void;
+  grinding: Mix;
+  onGrindingChange: (m: Mix) => void;
+  totalArea: number;
 }
 
-export const LabourExtras = ({ extras, onChange, notes, onNotesChange }: Props) => {
+export const LabourExtras = ({
+  extras, onChange, notes, onNotesChange,
+  grinding, onGrindingChange, totalArea,
+}: Props) => {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-xl font-semibold">Labour, Transport & Profit</h2>
-        <p className="text-sm text-muted-foreground">Labour is calculated once on combined floor + skirting area.</p>
+        <h2 className="text-xl font-semibold">Labour, Grinding & Extras</h2>
+        <p className="text-sm text-muted-foreground">
+          Labour is calculated once on the combined floor + skirting area.
+        </p>
       </div>
+
       <Card className="p-4 md:p-5">
         <WorkModeSelector
           selected={extras.workMode}
           onSelect={(m) => onChange({ ...extras, workMode: m })}
         />
       </Card>
+
+      <GrindingEditor mix={grinding} area={totalArea} onChange={onGrindingChange} />
+
       <Card className="p-4 md:p-5 space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="space-y-1">

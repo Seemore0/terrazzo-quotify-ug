@@ -8,11 +8,12 @@ import { useNavigate } from 'react-router-dom';
 import { usePresets } from '@/lib/presetContext';
 import { formatCurrency, WORK_MODES } from '@/lib/presetTypes';
 import { combineTotals, type Section, type QuoteExtras } from '@/lib/sectionCalc';
-import { generateQuotationPdf } from '@/lib/pdf';
+import { generateQuotationPdf, type PdfMaterialRow } from '@/lib/pdf';
 import { buildWhatsAppUrl } from '@/lib/whatsapp';
 import { useUpsertCustomer } from '@/hooks/useCustomers';
 import { useCreateQuotation } from '@/hooks/useQuotations';
 import { useReplaceSections } from '@/hooks/useQuotationSections';
+import { mixEnabledItems, type Mix } from '@/lib/mixTypes';
 import { useState } from 'react';
 
 interface ClientData { name: string; phone: string; location: string; }
@@ -21,11 +22,20 @@ interface Props {
   client: ClientData;
   floor: Section;
   skirting: Section | null;
+  grinding: Mix;
   extras: QuoteExtras;
   notes: string;
 }
 
-export const ReviewSection = ({ client, floor, skirting, extras, notes }: Props) => {
+const toRows = (mix: Mix): PdfMaterialRow[] =>
+  mixEnabledItems(mix).filter(i => i.qty > 0).map(i => ({
+    item: i.label,
+    quantity: `${i.qty} ${i.unit}`,
+    price: i.unitPrice,
+    total: i.qty * i.unitPrice,
+  }));
+
+export const ReviewSection = ({ client, floor, skirting, grinding, extras, notes }: Props) => {
   const { activePreset } = usePresets();
   const { toast } = useToast();
   const { session } = useAuth();
@@ -35,7 +45,7 @@ export const ReviewSection = ({ client, floor, skirting, extras, notes }: Props)
   const replaceSections = useReplaceSections();
   const [savedNumber, setSavedNumber] = useState<string | null>(null);
 
-  const t = combineTotals(activePreset.config, floor, skirting, extras);
+  const t = combineTotals(activePreset.config, floor, skirting, extras, grinding);
   const date = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
   const modeName = WORK_MODES.find(m => m.id === extras.workMode)?.name ?? extras.workMode;
   const floorStyle = activePreset.config.styles.find(s => s.id === floor.style_id);
@@ -43,16 +53,12 @@ export const ReviewSection = ({ client, floor, skirting, extras, notes }: Props)
   const skStyle = skirting ? activePreset.config.styles.find(s => s.id === skirting.style_id) : null;
   const skPattern = skirting ? activePreset.config.patterns.find(p => p.id === skirting.pattern_id) : null;
 
-  const buildPdf = (quoteNumber: string) => {
-    const castingRows = floor.mix.items
-      .filter(i => i.qty > 0)
-      .map(i => ({ item: i.label, quantity: `${i.qty} ${i.unit}`, price: i.unitPrice, total: i.qty * i.unitPrice }));
-    const grindingRows = skirting
-      ? skirting.mix.items.filter(i => i.qty > 0)
-          .map(i => ({ item: i.label, quantity: `${i.qty} ${i.unit}`, price: i.unitPrice, total: i.qty * i.unitPrice }))
-      : [];
+  const floorRows = toRows(floor.mix);
+  const skirtingRows = skirting ? toRows(skirting.mix) : [];
+  const grindingRows = toRows(grinding);
 
-    return generateQuotationPdf({
+  const buildPdf = (quoteNumber: string) =>
+    generateQuotationPdf({
       quoteNumber, date,
       presetName: activePreset.name,
       client: { name: client.name, phone: client.phone, location: client.location },
@@ -62,23 +68,27 @@ export const ReviewSection = ({ client, floor, skirting, extras, notes }: Props)
         multiplier: floorPattern?.multiplier ?? 1,
         baseRate: t.labourRate, rate: t.labourRate, total: t.grandTotal,
       },
-      casting: castingRows,
+      // Legacy fields kept for backward compatibility
+      casting: [...floorRows, ...skirtingRows],
       grinding: grindingRows,
       materialsTotal: t.materialsTotal,
-      // Extended fields for sectioned summary:
       sectioned: {
         floor: {
           area_m2: t.floorArea, thickness_mm: floor.thickness_mm, colour: floor.colour,
           styleName: floorStyle?.name, patternName: floorPattern?.name,
-          items: castingRows, subtotal: t.floorMaterials,
+          items: floorRows, subtotal: t.floorMaterials,
         },
         skirting: skirting ? {
           area_m2: t.skirtingArea,
           height_mm: skirting.height_mm, wall_length_m: skirting.wall_length_m,
           colour: skirting.colour,
           styleName: skStyle?.name, patternName: skPattern?.name,
-          items: grindingRows, subtotal: t.skirtingMaterials,
+          items: skirtingRows, subtotal: t.skirtingMaterials,
         } : null,
+        grindingItems: grindingRows,
+        castingMaterials: t.castingMaterials,
+        grindingMaterials: t.grindingMaterials,
+        materialsTotal: t.materialsTotal,
         labourCost: t.labourCost,
         transport: t.transport,
         profit: t.profit,
@@ -87,8 +97,7 @@ export const ReviewSection = ({ client, floor, skirting, extras, notes }: Props)
         modeName,
       },
       notes,
-    } as any);
-  };
+    });
 
   const getText = (num?: string) => `TERRAZZO QUOTATION${num ? ' ' + num : ''}
 Date: ${date}
@@ -98,7 +107,9 @@ ${client.location ? 'Location: ' + client.location + '\n' : ''}
 Main floor: ${t.floorArea.toFixed(2)} m² • ${floorStyle?.name ?? ''} • ${floorPattern?.name ?? ''}
 ${skirting ? `Skirting: ${t.skirtingArea.toFixed(2)} m²\n` : ''}Combined area: ${t.totalArea.toFixed(2)} m²
 
-Materials: ${formatCurrency(t.materialsTotal)}
+Casting materials: ${formatCurrency(t.castingMaterials)}
+Grinding materials: ${formatCurrency(t.grindingMaterials)}
+Materials total: ${formatCurrency(t.materialsTotal)}
 Labour: ${formatCurrency(t.labourCost)}
 Transport: ${formatCurrency(t.transport)}
 Profit (${extras.profitPct}%): ${formatCurrency(t.profit)}
@@ -135,7 +146,11 @@ Valid for 14 days.`;
         style_id: floor.style_id,
         pattern_id: floor.pattern_id,
         rate_per_m2: t.labourRate,
-        materials: { floor: floor.mix, skirting: skirting?.mix ?? null } as any,
+        materials: {
+          floor: floor.mix,
+          skirting: skirting?.mix ?? null,
+          grinding,
+        } as any,
         subtotal: t.subtotalBeforeProfit,
         total_cost: t.grandTotal,
         profit: t.profit,
@@ -175,6 +190,38 @@ Valid for 14 days.`;
 
   const saving = upsertCustomer.isPending || createQuotation.isPending || replaceSections.isPending;
 
+  const renderMixTable = (rows: PdfMaterialRow[], subtotalLabel: string, subtotal: number) => (
+    <table className="w-full text-sm border rounded overflow-hidden">
+      <thead className="bg-muted">
+        <tr>
+          <th className="p-2 text-left">Item</th>
+          <th className="p-2 text-right">Qty</th>
+          <th className="p-2 text-right">Unit</th>
+          <th className="p-2 text-right">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r, idx) => (
+          <tr key={idx} className="border-t">
+            <td className="p-2">{r.item}</td>
+            <td className="p-2 text-right">{r.quantity}</td>
+            <td className="p-2 text-right">{formatCurrency(r.price)}</td>
+            <td className="p-2 text-right">{formatCurrency(r.total)}</td>
+          </tr>
+        ))}
+        {!rows.length && (
+          <tr><td colSpan={4} className="p-3 text-center text-xs text-muted-foreground">No items selected.</td></tr>
+        )}
+      </tbody>
+      <tfoot>
+        <tr className="bg-primary/5">
+          <td colSpan={3} className="p-2 font-medium">{subtotalLabel}</td>
+          <td className="p-2 text-right font-bold">{formatCurrency(subtotal)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  );
+
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-semibold">Review & Send</h2>
@@ -191,64 +238,54 @@ Valid for 14 days.`;
         </div>
       </Card>
 
-      <Card className="p-4 md:p-5 space-y-3">
-        <h3 className="font-semibold text-primary">Main Floor</h3>
-        <div className="text-sm space-y-1">
-          <div>Area: <strong>{t.floorArea.toFixed(2)} m²</strong>{floor.thickness_mm ? ` · ${floor.thickness_mm} mm thick` : ''}</div>
-          {floor.colour && <div>Colour: {floor.colour}</div>}
-          <div>Style: {floorStyle?.name} · Pattern: {floorPattern?.name}</div>
-        </div>
-        <table className="w-full text-sm border rounded overflow-hidden">
-          <thead className="bg-muted"><tr><th className="p-2 text-left">Item</th><th className="p-2 text-right">Qty</th><th className="p-2 text-right">Unit</th><th className="p-2 text-right">Total</th></tr></thead>
-          <tbody>
-            {floor.mix.items.filter(i => i.qty > 0).map(i => (
-              <tr key={i.key} className="border-t">
-                <td className="p-2">{i.label}</td>
-                <td className="p-2 text-right">{i.qty} {i.unit}</td>
-                <td className="p-2 text-right">{formatCurrency(i.unitPrice)}</td>
-                <td className="p-2 text-right">{formatCurrency(i.qty * i.unitPrice)}</td>
-              </tr>
-            ))}
-          </tbody>
-          <tfoot><tr className="bg-primary/5"><td colSpan={3} className="p-2 font-medium">Floor subtotal</td><td className="p-2 text-right font-bold">{formatCurrency(t.floorMaterials)}</td></tr></tfoot>
-        </table>
-      </Card>
-
-      {skirting && (
-        <Card className="p-4 md:p-5 space-y-3">
-          <h3 className="font-semibold text-primary">Skirting</h3>
-          <div className="text-sm space-y-1">
-            <div>Area: <strong>{t.skirtingArea.toFixed(2)} m²</strong>{skirting.height_mm && skirting.wall_length_m ? ` (${skirting.height_mm} mm × ${skirting.wall_length_m} m)` : ''}</div>
-            {skirting.colour && <div>Colour: {skirting.colour}</div>}
-            <div>Style: {skStyle?.name} · Pattern: {skPattern?.name}</div>
-          </div>
-          <table className="w-full text-sm border rounded overflow-hidden">
-            <thead className="bg-muted"><tr><th className="p-2 text-left">Item</th><th className="p-2 text-right">Qty</th><th className="p-2 text-right">Unit</th><th className="p-2 text-right">Total</th></tr></thead>
-            <tbody>
-              {skirting.mix.items.filter(i => i.qty > 0).map(i => (
-                <tr key={i.key} className="border-t">
-                  <td className="p-2">{i.label}</td>
-                  <td className="p-2 text-right">{i.qty} {i.unit}</td>
-                  <td className="p-2 text-right">{formatCurrency(i.unitPrice)}</td>
-                  <td className="p-2 text-right">{formatCurrency(i.qty * i.unitPrice)}</td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot><tr className="bg-primary/5"><td colSpan={3} className="p-2 font-medium">Skirting subtotal</td><td className="p-2 text-right font-bold">{formatCurrency(t.skirtingMaterials)}</td></tr></tfoot>
-          </table>
-        </Card>
-      )}
-
       <Card className="p-4 md:p-5">
+        <h3 className="font-semibold text-primary mb-3">Cost Summary</h3>
         <table className="w-full text-sm">
           <tbody>
-            <tr className="border-b"><td className="p-2">Materials total</td><td className="p-2 text-right">{formatCurrency(t.materialsTotal)}</td></tr>
+            <tr className="border-b"><td className="p-2">Casting materials</td><td className="p-2 text-right">{formatCurrency(t.castingMaterials)}</td></tr>
+            <tr className="border-b"><td className="p-2">Grinding materials</td><td className="p-2 text-right">{formatCurrency(t.grindingMaterials)}</td></tr>
+            <tr className="border-b font-medium"><td className="p-2">Total materials cost</td><td className="p-2 text-right">{formatCurrency(t.materialsTotal)}</td></tr>
             <tr className="border-b"><td className="p-2">Labour ({t.totalArea.toFixed(2)} m² × {formatCurrency(t.labourRate)}/m²)</td><td className="p-2 text-right">{formatCurrency(t.labourCost)}</td></tr>
             <tr className="border-b"><td className="p-2">Transport</td><td className="p-2 text-right">{formatCurrency(t.transport)}</td></tr>
             <tr className="border-b"><td className="p-2">Profit ({extras.profitPct}%)</td><td className="p-2 text-right">{formatCurrency(t.profit)}</td></tr>
           </tbody>
-          <tfoot><tr className="bg-primary text-primary-foreground"><td className="p-3 font-bold text-lg">GRAND TOTAL</td><td className="p-3 text-right font-bold text-lg">{formatCurrency(t.grandTotal)}</td></tr></tfoot>
+          <tfoot>
+            <tr className="bg-primary text-primary-foreground">
+              <td className="p-3 font-bold text-lg">GRAND TOTAL</td>
+              <td className="p-3 text-right font-bold text-lg">{formatCurrency(t.grandTotal)}</td>
+            </tr>
+          </tfoot>
         </table>
+      </Card>
+
+      <Card className="p-4 md:p-5 space-y-4">
+        <h3 className="font-semibold text-primary">Casting Phase Materials</h3>
+
+        <div className="space-y-2">
+          <div className="text-sm font-medium">Main Floor · {t.floorArea.toFixed(2)} m²{floor.thickness_mm ? ` · ${floor.thickness_mm} mm` : ''}{floor.colour ? ` · ${floor.colour}` : ''}</div>
+          {renderMixTable(floorRows, 'Floor subtotal', t.floorMaterials)}
+        </div>
+
+        {skirting && (
+          <div className="space-y-2">
+            <div className="text-sm font-medium">
+              Skirting · {t.skirtingArea.toFixed(2)} m²
+              {skirting.height_mm && skirting.wall_length_m ? ` (${skirting.height_mm} mm × ${skirting.wall_length_m} m)` : ''}
+              {skirting.colour ? ` · ${skirting.colour}` : ''}
+            </div>
+            {renderMixTable(skirtingRows, 'Skirting subtotal', t.skirtingMaterials)}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between p-3 rounded-lg bg-primary/5 border border-primary/20">
+          <span className="font-medium">Casting Materials Total</span>
+          <span className="font-bold text-primary">{formatCurrency(t.castingMaterials)}</span>
+        </div>
+      </Card>
+
+      <Card className="p-4 md:p-5 space-y-3">
+        <h3 className="font-semibold text-primary">Grinding Phase Materials</h3>
+        {renderMixTable(grindingRows, 'Grinding subtotal', t.grindingMaterials)}
       </Card>
 
       <Card className="p-3 sticky bottom-2 shadow-lg border-primary/30">
