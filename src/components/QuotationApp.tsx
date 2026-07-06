@@ -109,10 +109,18 @@ const QuotationApp = () => {
         )}
         {step === 1 && <FloorSection section={floor} onChange={setFloor} />}
         {step === 2 && <SkirtingSection enabled={skirtingEnabled} onEnabledChange={setSkirtingEnabled} section={skirting} onChange={setSkirting} />}
-        {step === 3 && <LabourExtras extras={extras} onChange={setExtras} notes={notes} onNotesChange={setNotes} />}
+        {step === 3 && (
+          <LabourExtras
+            extras={extras} onChange={setExtras}
+            notes={notes} onNotesChange={setNotes}
+            grinding={grinding} onGrindingChange={setGrinding}
+            totalArea={(floor.area_m2 || 0) + (skirtingEnabled ? (skirting.area_m2 || 0) : 0)}
+          />
+        )}
         {step === 4 && (
           <ReviewSection client={client} floor={floor}
             skirting={skirtingEnabled ? skirting : null}
+            grinding={grinding}
             extras={extras} notes={notes} />
         )}
 
