@@ -17,7 +17,8 @@ import { DEFAULT_PRESET, type WorkMode } from '@/lib/presetTypes';
 import { defaultFloorMix, defaultSkirtingMix, defaultGrindingMix, type Mix } from '@/lib/mixTypes';
 import { type Section, type QuoteExtras } from '@/lib/sectionCalc';
 import { useNavigate } from 'react-router-dom';
-import { useQuotation, useQuotationSections } from '@/hooks/useQuotations';
+import { useQuotation } from '@/hooks/useQuotations';
+import { useQuotationSections } from '@/hooks/useQuotationSections';
 
 interface ClientData { name: string; phone: string; location: string; }
 
