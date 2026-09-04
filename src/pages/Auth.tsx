@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { lovable } from '@/integrations/lovable/index';
+
 import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -66,15 +68,18 @@ const Auth = () => {
 
   const handleGoogle = async () => {
     setBusy(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin },
+    const result = await lovable.auth.signInWithOAuth('google', {
+      redirect_uri: window.location.origin,
     });
-    if (error) {
+    if (result.error) {
       setBusy(false);
-      toast.error(friendly(error.message));
+      toast.error(friendly(result.error.message));
+      return;
     }
+    if (result.redirected) return;
+    toast.success('Signed in');
   };
+
 
   const handleForgot = async (e: React.FormEvent) => {
     e.preventDefault();
