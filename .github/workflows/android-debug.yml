@@ -6,9 +6,15 @@ on:
       - main
       - master
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create a GitHub Release with the APK"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-debug-apk:
@@ -34,7 +40,7 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Install npm dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Build web app
         run: npm run build
@@ -49,9 +55,23 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug
 
-      - name: Upload debug APK
+      - name: Verify APK exists
+        run: test -f android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: terrazzo-quotation-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: github.event_name == 'workflow_dispatch' && inputs.create_release == true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.0.${{ github.run_number }}
+          name: Terrazzo Quotation Pro v0.0.${{ github.run_number }}
+          generate_release_notes: true
+          files: android/app/build/outputs/apk/debug/app-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
