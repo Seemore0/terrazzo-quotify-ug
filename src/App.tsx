@@ -40,6 +40,7 @@ const App = () => (
             <PresetProvider>
               <Routes>
                 <Route path="/auth" element={<Auth />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<Index />} />
                   <Route path="/dashboard" element={<Suspense fallback={<PageFallback />}><Dashboard /></Suspense>} />
