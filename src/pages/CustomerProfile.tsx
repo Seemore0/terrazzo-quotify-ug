@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/presetTypes';
 import { ArrowLeft, Phone, Mail, MapPin, MessageCircle, Plus, FileText } from 'lucide-react';
-import { buildWhatsAppUrl } from '@/lib/whatsapp';
+import { openWhatsApp } from '@/lib/nativeShare';
+import { toast } from 'sonner';
 
 const CustomerProfile = () => {
   const { id } = useParams();
@@ -43,10 +44,11 @@ const CustomerProfile = () => {
             <Button asChild className="bg-gradient-primary">
               <Link to="/"><Plus className="h-4 w-4 mr-1" />New Quote</Link>
             </Button>
-            <Button asChild variant="outline">
-              <a href={buildWhatsAppUrl(customer.phone, `Hello ${customer.name},`)} target="_blank" rel="noopener noreferrer">
-                <MessageCircle className="h-4 w-4 mr-1" />WhatsApp
-              </a>
+            <Button variant="outline" onClick={() => void openWhatsApp(customer.phone, `Hello ${customer.name},`).catch(error => {
+              console.error('[whatsapp] Customer share failed', error);
+              toast.error('Could not open WhatsApp. You can use Share instead.');
+            })}>
+              <MessageCircle className="h-4 w-4 mr-1" />WhatsApp
             </Button>
           </div>
         </div>

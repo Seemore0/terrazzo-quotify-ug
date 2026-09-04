@@ -11,8 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { formatCurrency } from '@/lib/presetTypes';
 import { Search, Plus, FileText, MessageCircle, MoreVertical, Copy, Pencil, Archive, ArchiveRestore } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { buildWhatsAppUrl } from '@/lib/whatsapp';
+import { Link, useNavigate } from 'react-router-dom';
+import { openWhatsApp } from '@/lib/nativeShare';
 import { toast } from 'sonner';
 
 const statusColors: Record<QuoteStatus, string> = {
@@ -29,6 +29,7 @@ const STATUSES: QuoteStatus[] = ['draft', 'sent', 'approved', 'in_progress', 'co
 const statusLabel = (s: QuoteStatus) => s === 'in_progress' ? 'In Progress' : s.charAt(0).toUpperCase() + s.slice(1);
 
 const Quotes = () => {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<QuoteStatus | 'all' | 'active'>('active');
   const [editing, setEditing] = useState<Quotation | null>(null);
@@ -110,18 +111,22 @@ const Quotes = () => {
                       {STATUSES.map(s => <SelectItem key={s} value={s}>{statusLabel(s)}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <Button size="sm" variant="outline" asChild>
-                    <a href={buildWhatsAppUrl(q.customer_phone,
-                      `Hi ${q.customer_name}, your terrazzo quotation ${q.quote_number} totals ${formatCurrency(Number(q.total_cost))}.`)}
-                      target="_blank" rel="noopener noreferrer">
-                      <MessageCircle className="h-3.5 w-3.5" />
-                    </a>
+                  <Button size="sm" variant="outline" onClick={() => void openWhatsApp(q.customer_phone,
+                    `Hi ${q.customer_name}, your terrazzo quotation ${q.quote_number} totals ${formatCurrency(Number(q.total_cost))}.`
+                  ).catch(error => {
+                    console.error('[whatsapp] Quote share failed', error);
+                    toast.error('Could not open WhatsApp. You can use Share instead.');
+                  })}>
+                    <MessageCircle className="h-3.5 w-3.5" />
                   </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button size="sm" variant="outline" className="h-8 w-8 p-0"><MoreVertical className="h-3.5 w-3.5" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => navigate(`/?edit=${encodeURIComponent(q.id)}`)}>
+                        <Pencil className="h-3.5 w-3.5 mr-2" />Edit full quote
+                      </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setEditing(q)}>
                         <Pencil className="h-3.5 w-3.5 mr-2" />Edit details
                       </DropdownMenuItem>

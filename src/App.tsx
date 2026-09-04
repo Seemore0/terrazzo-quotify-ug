@@ -12,6 +12,7 @@ import AppLayout from "./components/AppLayout";
 import { AuthProvider } from "./hooks/useAuth";
 import { PresetProvider } from "./lib/presetContext";
 import { ThemeProvider } from "./hooks/useTheme";
+import { NativeAuthBridge } from "./components/NativeAuthBridge";
 import { Loader2 } from "lucide-react";
 
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -37,6 +38,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
+            <NativeAuthBridge />
             <PresetProvider>
               <Routes>
                 <Route path="/auth" element={<Auth />} />

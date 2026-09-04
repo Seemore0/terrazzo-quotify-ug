@@ -9,11 +9,13 @@ import { usePresets } from '@/lib/presetContext';
 import { formatCurrency, WORK_MODES } from '@/lib/presetTypes';
 import { combineTotals, type Section, type QuoteExtras } from '@/lib/sectionCalc';
 import { generateQuotationPdf, type PdfMaterialRow } from '@/lib/pdf';
-import { buildWhatsAppUrl } from '@/lib/whatsapp';
 import { useUpsertCustomer } from '@/hooks/useCustomers';
-import { useCreateQuotation } from '@/hooks/useQuotations';
+import { useCreateQuotation, useUpdateQuotation, type QuoteStatus } from '@/hooks/useQuotations';
 import { useReplaceSections } from '@/hooks/useQuotationSections';
 import { mixEnabledItems, type Mix } from '@/lib/mixTypes';
+import { copyToClipboard } from '@/lib/nativeClipboard';
+import { openWhatsApp } from '@/lib/nativeShare';
+import { saveQuotationPdf } from '@/lib/nativePdf';
 import { useState } from 'react';
 
 interface ClientData { name: string; phone: string; location: string; }
@@ -25,6 +27,9 @@ interface Props {
   grinding: Mix;
   extras: QuoteExtras;
   notes: string;
+  editingQuoteId?: string | null;
+  existingQuoteNumber?: string | null;
+  existingStatus?: QuoteStatus;
 }
 
 const toRows = (mix: Mix): PdfMaterialRow[] =>
@@ -35,15 +40,24 @@ const toRows = (mix: Mix): PdfMaterialRow[] =>
     total: i.qty * i.unitPrice,
   }));
 
-export const ReviewSection = ({ client, floor, skirting, grinding, extras, notes }: Props) => {
+export const ReviewSection = ({
+  client, floor, skirting, grinding, extras, notes,
+  editingQuoteId = null, existingQuoteNumber = null, existingStatus,
+}: Props) => {
   const { activePreset } = usePresets();
   const { toast } = useToast();
   const { session } = useAuth();
   const navigate = useNavigate();
   const upsertCustomer = useUpsertCustomer();
   const createQuotation = useCreateQuotation();
+  const updateQuotation = useUpdateQuotation();
   const replaceSections = useReplaceSections();
-  const [savedNumber, setSavedNumber] = useState<string | null>(null);
+  const [activeQuoteId, setActiveQuoteId] = useState<string | null>(editingQuoteId);
+  const [savedNumber, setSavedNumber] = useState<string | null>(existingQuoteNumber);
+  const [quoteStatus, setQuoteStatus] = useState<QuoteStatus | undefined>(existingStatus);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [copyBusy, setCopyBusy] = useState(false);
 
   const t = combineTotals(activePreset.config, floor, skirting, extras, grinding);
   const date = new Date().toLocaleDateString('en-UG', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -68,7 +82,6 @@ export const ReviewSection = ({ client, floor, skirting, grinding, extras, notes
         multiplier: floorPattern?.multiplier ?? 1,
         baseRate: t.labourRate, rate: t.labourRate, total: t.grandTotal,
       },
-      // Legacy fields kept for backward compatibility
       casting: [...floorRows, ...skirtingRows],
       grinding: grindingRows,
       materialsTotal: t.materialsTotal,
@@ -118,12 +131,50 @@ GRAND TOTAL: ${formatCurrency(t.grandTotal)}
 
 Valid for 14 days.`;
 
-  const handleCopy = async () => { await navigator.clipboard.writeText(getText(savedNumber ?? undefined)); toast({ title: 'Copied' }); };
-  const handleWA = () => window.open(buildWhatsAppUrl(client.phone, getText(savedNumber ?? undefined)), '_blank');
-  const handlePDF = () => {
-    const doc = buildPdf(savedNumber || 'DRAFT');
-    doc.save(`Quote_${(savedNumber || 'DRAFT')}_${client.name.replace(/\s+/g, '_')}.pdf`);
-    toast({ title: 'PDF downloaded' });
+  const handleCopy = async () => {
+    if (copyBusy) return;
+    setCopyBusy(true);
+    try {
+      await copyToClipboard(getText(savedNumber ?? undefined));
+      toast({ title: 'Quotation copied' });
+    } catch (error) {
+      console.error('[clipboard] Copy failed', error);
+      toast({ title: 'Copy failed. Please try again.', variant: 'destructive' });
+    } finally {
+      setCopyBusy(false);
+    }
+  };
+
+  const handleWA = async () => {
+    if (shareBusy) return;
+    setShareBusy(true);
+    toast({ title: 'Opening WhatsApp…' });
+    try {
+      await openWhatsApp(client.phone, getText(savedNumber ?? undefined));
+    } catch (error) {
+      console.error('[whatsapp] Share failed', error);
+      toast({ title: 'Could not open WhatsApp. You can use Share instead.', variant: 'destructive' });
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const handlePDF = async () => {
+    if (pdfBusy) return;
+    setPdfBusy(true);
+    toast({ title: 'Preparing PDF…' });
+    try {
+      const number = savedNumber || 'DRAFT';
+      const doc = buildPdf(number);
+      const clientName = client.name.trim().replace(/\s+/g, '_');
+      await saveQuotationPdf(doc, `Quote_${number}_${clientName}.pdf`);
+      toast({ title: 'Quotation PDF created successfully' });
+    } catch (error) {
+      console.error('[pdf] PDF generation/save failed', error);
+      toast({ title: 'Could not create the PDF. Please try again.', variant: 'destructive' });
+    } finally {
+      setPdfBusy(false);
+    }
   };
 
   const handleSave = async () => {
@@ -136,7 +187,8 @@ Valid for 14 days.`;
       const customer = await upsertCustomer.mutateAsync({
         name: client.name, phone: client.phone, location: client.location || null,
       } as any);
-      const created = await createQuotation.mutateAsync({
+
+      const patch = {
         customer_id: customer.id,
         customer_name: client.name,
         customer_phone: client.phone,
@@ -159,8 +211,41 @@ Valid for 14 days.`;
         has_sections: true,
         notes,
         preset_id: activePreset.id.startsWith('builtin-') ? null : activePreset.id,
+        status: quoteStatus ?? 'draft',
+      } as any;
+
+      if (activeQuoteId) {
+        const updated = await updateQuotation.mutateAsync({ id: activeQuoteId, patch });
+        await replaceSections.mutateAsync({
+          quoteId: activeQuoteId,
+          sections: [
+            {
+              kind: 'floor', area_m2: t.floorArea,
+              height_mm: null, wall_length_m: null, thickness_mm: floor.thickness_mm ?? null,
+              style_id: floor.style_id, pattern_id: floor.pattern_id, colour: floor.colour ?? null,
+              rate_per_m2: t.labourRate, materials_cost: t.floorMaterials,
+              mix: floor.mix, sort: 0,
+            },
+            ...(skirting ? [{
+              kind: 'skirting' as const, area_m2: t.skirtingArea,
+              height_mm: skirting.height_mm ?? null, wall_length_m: skirting.wall_length_m ?? null,
+              thickness_mm: null,
+              style_id: skirting.style_id, pattern_id: skirting.pattern_id, colour: skirting.colour ?? null,
+              rate_per_m2: t.labourRate, materials_cost: t.skirtingMaterials,
+              mix: skirting.mix, sort: 1,
+            }] : []),
+          ],
+        });
+        setSavedNumber(updated.quote_number);
+        setQuoteStatus(updated.status);
+        toast({ title: 'Quote updated successfully', description: `${updated.quote_number} updated` });
+        return;
+      }
+
+      const created = await createQuotation.mutateAsync({
+        ...patch,
         status: 'draft',
-      } as any);
+      });
       await replaceSections.mutateAsync({
         quoteId: created.id,
         sections: [
@@ -181,14 +266,21 @@ Valid for 14 days.`;
           }] : []),
         ],
       });
+      setActiveQuoteId(created.id);
       setSavedNumber(created.quote_number);
+      setQuoteStatus(created.status);
       toast({ title: 'Quote saved', description: `${created.quote_number} added to your quotes` });
-    } catch (e: any) {
-      toast({ title: 'Save failed', description: e.message, variant: 'destructive' });
+    } catch (error) {
+      console.error('[quote] Save/update failed', error);
+      toast({
+        title: activeQuoteId ? 'Update failed' : 'Save failed',
+        description: error instanceof Error ? error.message : 'Please try again.',
+        variant: 'destructive',
+      });
     }
   };
 
-  const saving = upsertCustomer.isPending || createQuotation.isPending || replaceSections.isPending;
+  const saving = upsertCustomer.isPending || createQuotation.isPending || updateQuotation.isPending || replaceSections.isPending;
 
   const renderMixTable = (rows: PdfMaterialRow[], subtotalLabel: string, subtotal: number) => (
     <table className="w-full text-sm border rounded overflow-hidden">
@@ -260,12 +352,10 @@ Valid for 14 days.`;
 
       <Card className="p-4 md:p-5 space-y-4">
         <h3 className="font-semibold text-primary">Casting Phase Materials</h3>
-
         <div className="space-y-2">
           <div className="text-sm font-medium">Main Floor · {t.floorArea.toFixed(2)} m²{floor.thickness_mm ? ` · ${floor.thickness_mm} mm` : ''}{floor.colour ? ` · ${floor.colour}` : ''}</div>
           {renderMixTable(floorRows, 'Floor subtotal', t.floorMaterials)}
         </div>
-
         {skirting && (
           <div className="space-y-2">
             <div className="text-sm font-medium">
@@ -276,7 +366,6 @@ Valid for 14 days.`;
             {renderMixTable(skirtingRows, 'Skirting subtotal', t.skirtingMaterials)}
           </div>
         )}
-
         <div className="flex items-center justify-between p-3 rounded-lg bg-primary/5 border border-primary/20">
           <span className="font-medium">Casting Materials Total</span>
           <span className="font-bold text-primary">{formatCurrency(t.castingMaterials)}</span>
@@ -290,13 +379,22 @@ Valid for 14 days.`;
 
       <Card className="p-3 sticky bottom-2 shadow-lg border-primary/30">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          <Button onClick={handleSave} disabled={saving} className="col-span-2 md:col-span-1 bg-gradient-primary">
+          <Button onClick={handleSave} disabled={saving || pdfBusy || shareBusy || copyBusy} className="col-span-2 md:col-span-1 bg-gradient-primary">
             {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-            {savedNumber ? 'Update' : 'Save Quote'}
+            {activeQuoteId ? 'Update Quote' : 'Save Quote'}
           </Button>
-          <Button onClick={handlePDF} variant="outline"><Download className="h-4 w-4 mr-1" /> PDF</Button>
-          <Button onClick={handleWA} variant="outline" className="text-green-600 border-green-600/40"><Share2 className="h-4 w-4 mr-1" /> WhatsApp</Button>
-          <Button onClick={handleCopy} variant="outline"><Copy className="h-4 w-4 mr-1" /> Copy</Button>
+          <Button onClick={handlePDF} disabled={pdfBusy || saving} variant="outline">
+            {pdfBusy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Download className="h-4 w-4 mr-1" />}
+            {pdfBusy ? 'Preparing…' : 'PDF'}
+          </Button>
+          <Button onClick={handleWA} disabled={shareBusy || saving} variant="outline" className="text-green-600 border-green-600/40">
+            {shareBusy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Share2 className="h-4 w-4 mr-1" />}
+            {shareBusy ? 'Opening…' : 'WhatsApp'}
+          </Button>
+          <Button onClick={handleCopy} disabled={copyBusy || saving} variant="outline">
+            {copyBusy ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Copy className="h-4 w-4 mr-1" />}
+            {copyBusy ? 'Copying…' : 'Copy'}
+          </Button>
         </div>
       </Card>
     </div>

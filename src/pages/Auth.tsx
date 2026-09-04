@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { Browser } from '@capacitor/browser';
 import { supabase } from '@/integrations/supabase/client';
-import { lovable } from '@/integrations/lovable/index';
+import { getAuthRedirectUrl } from '@/lib/authCallback';
+import { isNativeApp } from '@/lib/platform';
 
 import { useAuth } from '@/hooks/useAuth';
 import { Card } from '@/components/ui/card';
@@ -20,6 +22,7 @@ const friendly = (msg: string) => {
   if (m.includes('password') && m.includes('6')) return 'Password must be at least 6 characters.';
   if (m.includes('rate limit') || m.includes('too many')) return 'Too many attempts. Please wait a minute and try again.';
   if (m.includes('failed to fetch') || m.includes('network')) return 'Network problem — check your internet connection and try again.';
+  if (m.includes('expired') || m.includes('invalid token')) return 'This authentication link has expired. Request a new one and try again.';
   return msg;
 };
 
@@ -54,7 +57,7 @@ const Auth = () => {
     const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
-      options: { emailRedirectTo: window.location.origin },
+      options: { emailRedirectTo: getAuthRedirectUrl('/auth/callback') },
     });
     setBusy(false);
     if (error) return toast.error(friendly(error.message));
@@ -68,24 +71,34 @@ const Auth = () => {
 
   const handleGoogle = async () => {
     setBusy(true);
-    const result = await lovable.auth.signInWithOAuth('google', {
-      redirect_uri: window.location.origin,
-    });
-    if (result.error) {
-      setBusy(false);
-      toast.error(friendly(result.error.message));
-      return;
-    }
-    if (result.redirected) return;
-    toast.success('Signed in');
-  };
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${getAuthRedirectUrl('/auth/callback')}?next=${encodeURIComponent(redirectTo)}`,
+          skipBrowserRedirect: true,
+        },
+      });
+      if (error) throw error;
+      if (!data.url) throw new Error('Google sign-in URL was not returned');
 
+      if (isNativeApp()) {
+        await Browser.open({ url: data.url });
+      } else {
+        window.location.assign(data.url);
+      }
+    } catch (error) {
+      console.error('[auth] Google sign-in failed', error);
+      setBusy(false);
+      toast.error(friendly(error instanceof Error ? error.message : String(error)));
+    }
+  };
 
   const handleForgot = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: getAuthRedirectUrl('/reset-password'),
     });
     setBusy(false);
     if (error) return toast.error(friendly(error.message));
@@ -141,7 +154,7 @@ const Auth = () => {
                 </div>
               </div>
 
-              <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
+              <Tabs value={tab} onValueChange={(v) => setTab(v as 'signin' | 'signup')}>
                 <TabsList className="grid grid-cols-2 w-full">
                   <TabsTrigger value="signin">Sign in</TabsTrigger>
                   <TabsTrigger value="signup">Sign up</TabsTrigger>

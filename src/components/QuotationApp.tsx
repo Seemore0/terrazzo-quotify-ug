@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Calculator, ArrowLeft, ArrowRight, FileText, Settings, LogIn } from 'lucide-react';
+import { Calculator, ArrowLeft, ArrowRight, FileText, Settings, LogIn, Loader2 } from 'lucide-react';
 import { ClientInfoForm } from './ClientInfoForm';
 import { FloorSection } from './wizard/FloorSection';
 import { SkirtingSection } from './wizard/SkirtingSection';
@@ -12,20 +13,35 @@ import { PresetSwitcher } from './admin/PresetSwitcher';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { usePresets } from '@/lib/presetContext';
+import { DEFAULT_PRESET, type WorkMode } from '@/lib/presetTypes';
 import { defaultFloorMix, defaultSkirtingMix, defaultGrindingMix, type Mix } from '@/lib/mixTypes';
 import { type Section, type QuoteExtras } from '@/lib/sectionCalc';
 import { useNavigate } from 'react-router-dom';
+import { useQuotation, useQuotationSections } from '@/hooks/useQuotations';
 
 interface ClientData { name: string; phone: string; location: string; }
 
 const STEPS = ['Client', 'Main Floor', 'Skirting', 'Labour & Extras', 'Review'];
 
+type StoredMaterials = {
+  floor?: Mix;
+  skirting?: Mix | null;
+  grinding?: Mix;
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
+
 const QuotationApp = () => {
+  const [params] = useSearchParams();
+  const editId = params.get('edit');
   const [step, setStep] = useState(0);
   const { toast } = useToast();
   const navigate = useNavigate();
   const { session } = useAuth();
-  const { activePreset } = usePresets();
+  const { activePreset, presets, setActiveId, loading: presetsLoading } = usePresets();
+  const { data: existingQuote, isLoading: quoteLoading, error: quoteError } = useQuotation(editId ?? undefined);
+  const { data: existingSections, isLoading: sectionsLoading, error: sectionsError } = useQuotationSections(editId ?? undefined);
+  const hydratedId = useRef<string | null>(null);
 
   const styles = activePreset.config.styles.filter(s => s.active);
   const patterns = activePreset.config.patterns.filter(p => p.active);
@@ -58,11 +74,89 @@ const QuotationApp = () => {
     }
   };
 
+  useEffect(() => {
+    if (!editId || !existingQuote || sectionsLoading || hydratedId.current === editId) return;
+    if (presetsLoading) return;
+
+    const targetPresetId = existingQuote.preset_id ?? DEFAULT_PRESET.id;
+    const presetAvailable = !existingQuote.preset_id || presets.some(p => p.id === targetPresetId);
+    if (!presetAvailable) {
+      toast({ title: 'Preset unavailable', description: 'The quote will open with the currently available preset.' });
+    }
+    if (presets.some(p => p.id === targetPresetId)) setActiveId(targetPresetId);
+
+    const sectionList = existingSections ?? [];
+    const floorSection = sectionList.find(section => section.kind === 'floor');
+    const skirtingSection = sectionList.find(section => section.kind === 'skirting');
+    const materialObject: StoredMaterials = isRecord(existingQuote.materials) ? existingQuote.materials as StoredMaterials : {};
+
+    setClient({
+      name: existingQuote.customer_name,
+      phone: existingQuote.customer_phone,
+      location: existingQuote.customer_location ?? '',
+    });
+    setFloor({
+      kind: 'floor',
+      area_m2: Number(floorSection?.area_m2 ?? existingQuote.area_m2 ?? 0),
+      thickness_mm: floorSection?.thickness_mm ?? 40,
+      style_id: floorSection?.style_id ?? existingQuote.style_id ?? defaultStyle,
+      pattern_id: floorSection?.pattern_id ?? existingQuote.pattern_id ?? defaultPattern,
+      colour: floorSection?.colour ?? '',
+      mix: floorSection?.mix ?? materialObject.floor ?? defaultFloorMix(),
+    });
+
+    if (skirtingSection || materialObject.skirting) {
+      setSkirtingEnabled(true);
+      setSkirting({
+        kind: 'skirting',
+        area_m2: Number(skirtingSection?.area_m2 ?? 0),
+        height_mm: skirtingSection?.height_mm ?? 100,
+        wall_length_m: skirtingSection?.wall_length_m ?? 0,
+        style_id: skirtingSection?.style_id ?? existingQuote.style_id ?? defaultStyle,
+        pattern_id: skirtingSection?.pattern_id ?? existingQuote.pattern_id ?? defaultPattern,
+        colour: skirtingSection?.colour ?? '',
+        mix: skirtingSection?.mix ?? materialObject.skirting ?? defaultSkirtingMix(),
+      });
+    } else {
+      setSkirtingEnabled(false);
+    }
+
+    setGrinding(materialObject.grinding ?? defaultGrindingMix());
+    setExtras({
+      workMode: existingQuote.work_mode as WorkMode,
+      transportCost: Number(existingQuote.transport_cost ?? 0),
+      profitPct: Number(existingQuote.profit_pct ?? 0),
+    });
+    setNotes(existingQuote.notes ?? '');
+    hydratedId.current = editId;
+    setStep(4);
+  }, [editId, existingQuote, existingSections, sectionsLoading, presets, presetsLoading, setActiveId, toast, defaultStyle, defaultPattern]);
+
   const handleNext = () => {
     if (!canNext()) { toast({ title: 'Incomplete', description: 'Please fill required fields', variant: 'destructive' }); return; }
     setStep(s => Math.min(s + 1, STEPS.length - 1));
   };
   const handleBack = () => setStep(s => Math.max(s - 1, 0));
+
+  if (editId && (quoteLoading || sectionsLoading || presetsLoading)) {
+    return (
+      <div className="min-h-screen bg-gradient-subtle flex items-center justify-center p-6">
+        <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /> Loading quotation…</div>
+      </div>
+    );
+  }
+
+  if (editId && (quoteError || sectionsError || !existingQuote)) {
+    return (
+      <div className="min-h-screen bg-gradient-subtle flex items-center justify-center p-6">
+        <Card className="p-6 max-w-md text-center space-y-3">
+          <h1 className="font-semibold">Quotation could not be loaded</h1>
+          <p className="text-sm text-muted-foreground">{quoteError?.message ?? sectionsError?.message ?? 'The requested quotation was not found.'}</p>
+          <Button onClick={() => navigate('/quotes')}>Back to quotations</Button>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-subtle">
@@ -121,7 +215,11 @@ const QuotationApp = () => {
           <ReviewSection client={client} floor={floor}
             skirting={skirtingEnabled ? skirting : null}
             grinding={grinding}
-            extras={extras} notes={notes} />
+            extras={extras} notes={notes}
+            editingQuoteId={editId}
+            existingQuoteNumber={existingQuote?.quote_number}
+            existingStatus={existingQuote?.status}
+          />
         )}
 
         {step < 4 && (
