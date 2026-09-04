@@ -6,12 +6,6 @@ on:
       - main
       - master
   workflow_dispatch:
-    inputs:
-      create_release:
-        description: "Create a GitHub Release with the APK"
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: write
@@ -72,7 +66,7 @@ jobs:
           if-no-files-found: error
 
       - name: Create GitHub Release
-        if: github.event_name == 'workflow_dispatch' && inputs.create_release == true
+        if: success()
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v0.0.${{ github.run_number }}
