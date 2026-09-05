@@ -6,22 +6,32 @@ import { handleAuthCallbackUrl } from '@/lib/authCallback';
 
 const AuthCallback = () => {
   const navigate = useNavigate();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     let mounted = true;
 
     const run = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const oauthError = params.get('error_description') || params.get('error');
+      if (oauthError) {
+        console.error('[auth] OAuth provider returned an error:', oauthError);
+        if (mounted) {
+          setError(true);
+          toast.error('Google sign-in was cancelled or rejected.');
+        }
+        return;
+      }
+
       try {
         const destination = await handleAuthCallbackUrl(window.location.href);
-        if (!mounted) return;
-        navigate(destination, { replace: true });
+        if (mounted) navigate(destination, { replace: true });
       } catch (err) {
         console.error('[auth] Web OAuth callback failed', err);
-        const message = err instanceof Error ? err.message : String(err);
-        if (!mounted) return;
-        setError(message);
-        toast.error('Google sign-in could not be completed. Please try again.');
+        if (mounted) {
+          setError(true);
+          toast.error('Google sign-in could not be completed. Please try again.');
+        }
       }
     };
 
