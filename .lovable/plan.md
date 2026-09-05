@@ -1,144 +1,53 @@
-# Terrazzo Quotation Engine v2 — Multi-Section + Custom Mixes
+# Offline-first + Guest Mode Upgrade
 
-Replaces the current 5-step wizard with a new multi-section flow while keeping the existing calculation, PDF, and DB compatible for old records.
+Goal: a contractor installs the app once, turns off all internet, taps **Continue as Guest**, and does full quotations — create customers, quote, save, reopen, PDF, share — with no account.
 
-## What we're building
+Nothing about the calculations, material logic, presets, PDF layout, Android build, or the APK workflow changes.
 
-1. **Two-section quotes** — every new quote has a Main Floor section and an optional Skirting section, each with its own dimensions, style, pattern, colour, and material mix.
-2. **Quantity-only custom mixes** — bags / kg entered directly for Stones (white/black/red/other), Cement (white/OPC), Oxides (black/red/yellow/green/blue/other), plus wooden strips and other materials.
-3. **Mix presets library** — built-in defaults + per-user saved mixes, loadable into any section.
-4. **One labour calculation** across combined area, using existing labour rate logic.
-5. **Professional PDF** with separated Floor / Skirting breakdowns and combined totals.
-6. **Backward compatible** — existing quotations continue to display and calculate using the current single-section engine.
+## What you will see
 
-## New wizard flow (replaces current 5 steps)
+1. **New welcome screen** on first open: Sign In / Create Account / Continue as Guest. Guest opens the app instantly, no email, no password, no internet.
+2. **Everything works offline** — quotes, customers, materials, mixes, presets, settings, history, search, PDF, share. Data is stored on the device and survives closing the app or the phone killing it.
+3. **A small status chip** in the top bar: "Offline", "Guest — saved on this device", or "Online • Synced".
+4. **No forced login ever again.** Sign-in is only asked for when you tap something explicitly cloud-related.
+5. **Signing up later keeps your guest work.** A "Create account & upload my data" action merges device data into the cloud instead of wiping it.
 
-```text
-1. Client & Project    Name, phone, location, notes
-2. Main Floor          Area (m² or ft²), thickness, style, pattern, colour, mix editor
-3. Skirting (optional) Height (mm) × wall length (m) → area, or manual area,
-                       style, pattern, colour, mix editor
-4. Labour & Extras     Work mode, transport, profit %, notes
-                       (labour rate × (floor area + skirting area))
-5. Review & Generate   Combined summary, PDF, WhatsApp, save
-```
+## Technical approach
 
-A "Skip skirting" toggle keeps step 3 optional. Each section has a **Load preset** / **Save as preset** button next to the mix editor.
+### Local storage layer
+- Add **Dexie (IndexedDB)** — pure JS, no new native plugin, so the existing Gradle/Capacitor Android build is untouched and it persists inside the Android WebView across restarts.
+- New `src/lib/local/db.ts` defining tables that mirror the existing Supabase row shapes exactly (so existing components and types keep working): `customers`, `quotations`, `quotation_sections`, `mix_presets`, `pricing_presets`, `settings`, `sync_queue`.
+- Every record carries `owner_id` (the guest id for local sessions), `updated_at`, and a `dirty` flag for later sync.
 
-## Mix editor (Quantity mode)
+### Services (centralised, typed)
+New `src/lib/local/`:
+- `guestAuthService.ts` — creates/persists a stable local guest identity (`guest-<uuid>`), mode = `guest | cloud | signed-out`.
+- `localCustomerService.ts`, `localQuotationService.ts` (incl. sections), `localPresetService.ts` (pricing + mix presets), `localMaterialService.ts`, `localSettingsService.ts`.
+- `quoteNumberService.ts` — offline numbering `QT-YYMMDD-0001` via an atomic Dexie transaction on a local counter, unique per device; keeps the existing cloud numbering when signed in and online.
+- `connectionService.ts` — online/offline signal (`navigator.onLine` + a cheap reachability probe), exposed via `useConnection()`.
+- `syncService.ts` — for signed-in users only: push dirty local rows, pull remote changes, last-write-wins by `updated_at`, merge (never delete local rows).
 
-Grouped inputs, all in bags/kg with running subtotal per group:
+### Repository swap in the existing hooks
+`useCustomers`, `useQuotations`, `useQuotationSections`, `useMixPresets`, `presetsApi`/`presetContext` keep their exact public APIs and return types. Internally each call is routed:
+- local read/write always happens first (so the UI never waits on the network);
+- if session is cloud + online, the same change is queued for sync;
+- any Supabase failure (`Failed to fetch`, auth session missing, timeout) is caught and swallowed — the local result is returned.
 
-- Stones (bags): White, Black, Red, Other
-- Cement (bags): White, Ordinary Portland
-- Oxides (kg): Black, Red, Yellow, Green, Blue, Other
-- Other materials: Wooden strips, Stips, Nails, Soft brush (auto-suggested from area but editable)
+### Auth flow
+- `src/pages/Welcome.tsx` with the three buttons; becomes the entry when there is no session and no guest session.
+- `useAuth` extended with `mode`, `guestId`, `continueAsGuest()`, `isGuest`; it no longer blocks on `getSession()` — it resolves local state immediately and refreshes the cloud session in the background.
+- `AppLayout` stops redirecting to `/auth`: it allows guest sessions through and renders instantly.
+- Existing Sign In / Create Account / Google / reset-password screens stay exactly as they are.
 
-Validation: no negative values; oxide total ≤ reasonable cap (warn if > 2 kg/m²); at least one stone entry > 0.
+### Seeding + PDF
+- On first launch the built-in styles, patterns, material prices, formula factors and the 5 built-in mix presets are seeded into the local DB from the existing `presetTypes` defaults, so a fresh offline install has full data.
+- `src/lib/pdf.ts` logic is untouched; jsPDF and fonts are already bundled. Any remote logo URL is replaced by a locally stored base64 logo in settings so PDFs render with no network.
 
-## Database (new tables, existing untouched)
+### Cloud/admin surfaces in guest mode
+- Admin settings, presets and company info write to local settings for guests (previously required sign-in).
+- Cloud-only actions (share to team, cloud backup) show a single inline "Sign in to sync" prompt instead of redirecting.
 
-- `quotation_sections` — one row per section (`floor` | `skirting`) of a quote:
-  - `quote_id`, `kind`, `area_m2`, `height_mm`, `wall_length_m`, `thickness_mm`,
-    `style_id`, `pattern_id`, `colour`, `rate_per_m2`, `materials_cost`,
-    `mix_jsonb` (all quantities), `sort`
-- `mix_presets` — reusable mixes:
-  - `owner_id` (nullable → built-in), `name`, `kind` (`floor` | `skirting` | `any`),
-    `mix_jsonb`, `is_builtin`
-- RLS: sections inherit access from parent quote (owner_id via join policy);
-  mix_presets readable when `is_builtin OR owner_id = auth.uid()`, writable only by owner.
-- Seed 5 built-ins: Pure White, Black & White, Red Decorative, Hospital White, School Standard.
-
-`quotations` table gets two optional columns for aggregate display without breaking old rows:
-- `has_sections` boolean default false
-- `transport_cost` numeric default 0, `profit_pct` numeric default 0
-
-Existing single-section quotes keep working through the current `materials`/`style_id`/`pattern_id` columns; new quotes set `has_sections = true` and read from `quotation_sections`.
-
-## Calculation
-
-```text
-floorArea      = section(floor).area_m2
-skirtingArea   = section(skirting).area_m2 or 0
-totalArea      = floorArea + skirtingArea
-
-floorMaterials    = sum(mix line items × unit prices)  ← from active preset prices
-skirtingMaterials = sum(mix line items × unit prices)
-
-labourCost   = totalArea × labourRate(style, pattern, workMode)
-transport    = user input
-profit       = (materials + labour + transport) × profit_pct / 100
-grandTotal   = materials + labour + transport + profit
-```
-
-Unit prices for stones/cement/oxides continue to come from the active pricing preset (`pricing_presets.config.materials`), so admin price edits still cascade.
-
-## PDF
-
-Extend `src/lib/pdf.ts` to render, when `has_sections`:
-
-```text
-MAIN FLOOR
-  Area: 42 m² · Thickness 40 mm · Style: Bold · Colour: Grey
-  Materials
-    - White stones ................. 10 bags × 15,000 = 150,000
-    - Black oxide .................. 2 kg  × 15,000 =  30,000
-    ...
-  Floor subtotal ................................... 620,000
-
-SKIRTING
-  Area: 6.5 m² (100 mm × 65 m) · Style: Bold · Colour: Grey
-  Materials
-    ...
-  Skirting subtotal ................................  95,000
-
-LABOUR (48.5 m² combined) ..........................  430,000
-Transport ..........................................   50,000
-Profit (15%) ....................................... 179,250
-GRAND TOTAL ....................................... 1,374,250
-```
-
-Old quotes fall back to the current single-table PDF.
-
-## Files
-
-**New**
-- `src/lib/mixTypes.ts` — mix schema, quantity types, validators
-- `src/lib/sectionCalc.ts` — section + combined totals
-- `src/components/wizard/FloorSection.tsx`
-- `src/components/wizard/SkirtingSection.tsx`
-- `src/components/wizard/LabourExtras.tsx`
-- `src/components/wizard/ReviewSection.tsx`
-- `src/components/mix/MixEditor.tsx`
-- `src/components/mix/MixPresetPicker.tsx`
-- `src/hooks/useQuotationSections.ts`
-- `src/hooks/useMixPresets.ts`
-- `supabase/migrations/*_sections_and_mixes.sql`
-
-**Edited**
-- `src/components/QuotationApp.tsx` — new step orchestration
-- `src/components/LiveSummary.tsx` — combined summary
-- `src/hooks/useQuotations.ts` — create with sections
-- `src/lib/pdf.ts` — sectioned layout with fallback
-- `src/lib/schemas.ts` — section + mix zod schemas
-- `src/pages/CustomerProfile.tsx`, `Quotes.tsx` — display combined totals
-
-**Untouched (backward compat)**
-- All existing quotation rows, admin pricing presets editors, dashboard queries.
-
-## Technical notes
-
-- Sections stored as separate rows keeps queries simple and lets us later add multi-room quotes without another migration.
-- All mix values live inside `mix_jsonb` on each section — flexible, no per-material columns to migrate when the mix schema grows.
-- Zod schemas validate on the client, and a Postgres trigger on `quotation_sections` re-checks non-negative numbers and total-percentage bounds server-side.
-- Mobile: mix editor uses the existing card-style responsive pattern from the admin editors (`useIsMobile` split), sticky "Next" button on section steps.
-
-## Rollout order
-
-1. Migration (tables, RLS, GRANTs, built-in mix seeds).
-2. Types + calc utilities + zod.
-3. Mix editor + preset picker (isolated, testable).
-4. New wizard steps replacing current step components.
-5. PDF + save flow wiring.
-6. Read-path updates for lists / customer profile.
-7. Smoke test old quote view, new quote create, PDF, WhatsApp.
+## Validation
+- `npm run build` plus a TypeScript check must pass clean.
+- Browser test with network forced offline: guest entry, create customer, create + save quote, reload, reopen quote, edit, duplicate, delete, generate PDF.
+- Confirm the Android workflow file and Capacitor config need no changes (verified: no `android/` folder is committed; the workflow generates it, and no new native plugin is added).
