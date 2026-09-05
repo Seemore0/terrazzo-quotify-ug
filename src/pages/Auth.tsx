@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Browser } from '@capacitor/browser';
 import { supabase } from '@/integrations/supabase/client';
-import { getAuthRedirectUrl } from '@/lib/authCallback';
+import { getAuthRedirectUrl, rememberWebAuthNext } from '@/lib/authCallback';
 import { isNativeApp } from '@/lib/platform';
 
 import { useAuth } from '@/hooks/useAuth';
@@ -20,6 +20,7 @@ const friendly = (msg: string) => {
   if (m.includes('already registered') || m.includes('already been registered')) return 'That email already has an account — switch to “Sign in”.';
   if (m.includes('email not confirmed')) return 'Your email is not confirmed yet. Check your inbox for the confirmation link.';
   if (m.includes('password') && m.includes('6')) return 'Password must be at least 6 characters.';
+  if (m.includes('provider is not enabled') || m.includes('unsupported provider')) return 'Google sign-in is not enabled for this Supabase project yet.';
   if (m.includes('rate limit') || m.includes('too many')) return 'Too many attempts. Please wait a minute and try again.';
   if (m.includes('failed to fetch') || m.includes('network')) return 'Network problem — check your internet connection and try again.';
   if (m.includes('expired') || m.includes('invalid token')) return 'This authentication link has expired. Request a new one and try again.';
@@ -36,7 +37,10 @@ const Auth = () => {
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<'auth' | 'forgot'>('auth');
 
-  const redirectTo = params.get('next') || '/dashboard';
+  const rawRedirectTo = params.get('next');
+  const redirectTo = rawRedirectTo && rawRedirectTo.startsWith('/') && !rawRedirectTo.startsWith('//')
+    ? rawRedirectTo
+    : '/dashboard';
 
   useEffect(() => {
     if (session) navigate(redirectTo, { replace: true });
@@ -72,17 +76,24 @@ const Auth = () => {
   const handleGoogle = async () => {
     setBusy(true);
     try {
+      const native = isNativeApp();
+      const callbackUrl = getAuthRedirectUrl('/auth/callback');
+
+      if (!native) rememberWebAuthNext(redirectTo);
+
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${getAuthRedirectUrl('/auth/callback')}?next=${encodeURIComponent(redirectTo)}`,
+          redirectTo: native
+            ? `${callbackUrl}?next=${encodeURIComponent(redirectTo)}`
+            : callbackUrl,
           skipBrowserRedirect: true,
         },
       });
       if (error) throw error;
       if (!data.url) throw new Error('Google sign-in URL was not returned');
 
-      if (isNativeApp()) {
+      if (native) {
         await Browser.open({ url: data.url });
       } else {
         window.location.assign(data.url);
