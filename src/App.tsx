@@ -7,6 +7,7 @@ import { lazy, Suspense } from "react";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import Auth from "./pages/Auth";
+import AuthCallback from "./pages/AuthCallback";
 import ResetPassword from "./pages/ResetPassword";
 import AppLayout from "./components/AppLayout";
 import { AuthProvider } from "./hooks/useAuth";
@@ -42,6 +43,7 @@ const App = () => (
             <PresetProvider>
               <Routes>
                 <Route path="/auth" element={<Auth />} />
+                <Route path="/auth/callback" element={<AuthCallback />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route element={<AppLayout />}>
                   <Route path="/" element={<Index />} />
