@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Mix } from '@/lib/mixTypes';
+import { cloudActive } from '@/lib/local/connection';
+import { listLocalSections, putLocalSections, replaceLocalSections } from '@/lib/local/localQuotationService';
 
 export type SectionKind = 'floor' | 'skirting';
 
@@ -24,17 +26,29 @@ export interface QuotationSection {
 
 export type SectionInsert = Omit<QuotationSection, 'id' | 'owner_id' | 'quote_id'>;
 
+const tryCloud = async <T>(fn: () => Promise<T>): Promise<T | null> => {
+  if (!cloudActive()) return null;
+  try {
+    return await fn();
+  } catch (error) {
+    console.warn('[offline] cloud call skipped', error);
+    return null;
+  }
+};
+
 export const useQuotationSections = (quoteId: string | undefined) => useQuery({
   queryKey: ['quotation-sections', quoteId],
   enabled: !!quoteId,
   queryFn: async (): Promise<QuotationSection[]> => {
-    const { data, error } = await (supabase as any)
-      .from('quotation_sections')
-      .select('*')
-      .eq('quote_id', quoteId!)
-      .order('sort', { ascending: true });
-    if (error) throw error;
-    return (data ?? []) as QuotationSection[];
+    await tryCloud(async () => {
+      const { data, error } = await (supabase as any)
+        .from('quotation_sections')
+        .select('*')
+        .eq('quote_id', quoteId!);
+      if (error) throw error;
+      await putLocalSections((data ?? []) as QuotationSection[]);
+    });
+    return listLocalSections(quoteId!);
   },
 });
 
@@ -42,18 +56,18 @@ export const useReplaceSections = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ quoteId, sections }: { quoteId: string; sections: SectionInsert[] }) => {
-      const { data: userRes } = await supabase.auth.getUser();
-      const owner_id = userRes.user?.id;
-      if (!owner_id) throw new Error('Sign in required');
-      const { error: delErr } = await (supabase as any)
-        .from('quotation_sections').delete().eq('quote_id', quoteId);
-      if (delErr) throw delErr;
-      if (!sections.length) return [];
-      const rows = sections.map(s => ({ ...s, quote_id: quoteId, owner_id }));
-      const { data, error } = await (supabase as any)
-        .from('quotation_sections').insert(rows).select();
-      if (error) throw error;
-      return data as QuotationSection[];
+      const rows = await replaceLocalSections(quoteId, sections);
+      await tryCloud(async () => {
+        const { data: userRes } = await supabase.auth.getUser();
+        const owner_id = userRes.user?.id;
+        if (!owner_id) return;
+        await (supabase as any).from('quotation_sections').delete().eq('quote_id', quoteId);
+        if (rows.length) {
+          await (supabase as any).from('quotation_sections')
+            .insert(rows.map(r => ({ ...r, owner_id })));
+        }
+      });
+      return rows;
     },
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ['quotation-sections', v.quoteId] });
